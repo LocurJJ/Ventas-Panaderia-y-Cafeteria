@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panaderia Josue V2</title>
+  <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+  <main class="home-shell">
+    <section class="hero-panel">
+      <p class="eyebrow">Sistema de ventas</p>
+      <h1>Panaderia Josue</h1>
+      <p>ElegÃ­ donde vas a trabajar. Esta version guarda cada venta por separado para evitar que se pisen entre cajas.</p>
+    </section>
+
+    <section class="home-grid">
+      <a class="home-card" href="ventas.html?local=Central">
+        <span>Central</span>
+        <small>Vender en central</small>
+      </a>
+      <a class="home-card" href="ventas.html?local=Sucursal">
+        <span>Sucursal</span>
+        <small>Vender en sucursal</small>
+      </a>
+      <a class="home-card" href="ventas.html?local=Cafeteria">
+        <span>Cafeteria</span>
+        <small>Vender en cafeteria</small>
+      </a>
+      <button class="home-card" id="adminButton" type="button">
+        <span>Admin</span>
+        <small>Productos y reportes</small>
+      </button>
+      <a class="home-card" href="compras.html">
+        <span>Compra</span>
+        <small>Armar sugerencia de compra</small>
+      </a>
+      <a class="home-card" href="lista-compra.html">
+        <span>Lista de compra</span>
+        <small>Ver orden armada</small>
+      </a>
+    </section>
+  </main>
+
+  <dialog id="adminDialog">
+    <form method="dialog" class="dialog-card" id="adminForm">
+      <h2>Ingresar a Admin</h2>
+      <label>
+        ContraseÃ±a
+        <input id="adminPassword" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
+      </label>
+      <p class="error hidden" id="adminError">ContraseÃ±a incorrecta.</p>
+      <div class="dialog-actions">
+        <button type="button" class="secondary-button" id="cancelAdmin">Cancelar</button>
+        <button class="primary-button" type="submit">Entrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const dialog = document.getElementById("adminDialog");
+    const password = document.getElementById("adminPassword");
+    const error = document.getElementById("adminError");
+
+    document.getElementById("adminButton").addEventListener("click", () => {
+      password.value = "";
+      error.classList.add("hidden");
+      dialog.showModal();
+      setTimeout(() => password.focus(), 50);
+    });
+
+    document.getElementById("cancelAdmin").addEventListener("click", () => dialog.close());
+
+    document.getElementById("adminForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (password.value === "1704") {
+        window.location.href = "admin.html";
+        return;
+      }
+      error.classList.remove("hidden");
+      password.select();
+    });
+  </script>
+</body>
+</html>
