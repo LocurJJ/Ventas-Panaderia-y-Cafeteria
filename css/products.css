@@ -1,0 +1,142 @@
+.top-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.products-admin {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.panel-title-row h2 {
+  margin: 0 0 8px;
+}
+
+.product-list-panel {
+  height: calc(100vh - 190px);
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+}
+
+.product-list {
+  overflow-y: auto;
+  min-height: 0;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+
+.product-list button,
+.mini-product-item {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.product-list button.active,
+.mini-product-item.active {
+  border-color: var(--blue);
+  background: #1d3270;
+}
+
+.product-list strong,
+.mini-product-item strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.product-list small,
+.mini-product-item small {
+  display: block;
+  color: var(--muted);
+}
+
+.editor-panel form {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.checkbox-box {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-box input {
+  width: auto;
+}
+
+.danger-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.whatsapp-box {
+  padding-top: 18px;
+}
+
+.compact-actions {
+  display: flex;
+  gap: 10px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 150px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--panel-2);
+  color: var(--text);
+  resize: vertical;
+}
+
+@media (max-width: 900px) {
+  .products-admin,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-list-panel {
+    height: auto;
+    min-height: 0;
+  }
+}
