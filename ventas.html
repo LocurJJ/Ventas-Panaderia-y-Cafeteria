@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventas - Panaderia Josue V2</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/sales.css">
+</head>
+<body>
+  <div class="sales-app">
+    <aside class="sidebar">
+      <h1>Josue</h1>
+      <p id="localName">Central</p>
+      <nav>
+        <button class="active" data-view="sell">Vender</button>
+        <button data-view="shift">Turnos</button>
+        <button data-view="products">Productos</button>
+        <button data-view="notebook">Cuaderno</button>
+        <button data-view="clients">Clientes</button>
+      </nav>
+      <a href="index.html">Volver al inicio</a>
+    </aside>
+
+    <main class="workspace">
+      <section class="view sell-view" id="sellView">
+        <aside class="cart-panel">
+          <div class="mode-switch hidden" id="cafeModeSwitch">
+            <button class="active" type="button" data-cafe-mode="counter">Panaderia</button>
+            <button type="button" data-cafe-mode="tables">Mesa</button>
+          </div>
+          <h2>Venta</h2>
+          <label>
+            Cliente
+            <select id="clientSelect"></select>
+          </label>
+
+          <div class="cart-head">
+            <span>Producto</span>
+            <span>Cant.</span>
+            <span>Precio</span>
+          </div>
+          <div class="cart-list" id="cartList"></div>
+
+          <div class="cart-footer">
+            <h3>Total: <span id="cartTotal">$ 0</span></h3>
+            <button class="primary-button" id="chargeButton" type="button">Cobrar</button>
+          </div>
+        </aside>
+
+        <section class="product-panel">
+          <input id="productSearch" class="search-input" placeholder="Buscar producto o codigo..." autocomplete="off">
+          <div class="product-grid" id="productGrid"></div>
+        </section>
+      </section>
+
+      <section class="view hidden cafe-view" id="cafeTableView">
+        <header class="cafe-toolbar">
+          <div class="mode-switch">
+            <button type="button" data-cafe-mode="counter">Panaderia</button>
+            <button class="active" type="button" data-cafe-mode="tables">Mesa</button>
+          </div>
+          <strong id="selectedTableTitle">Selecciona una mesa</strong>
+        </header>
+
+        <div class="cafe-layout">
+          <aside class="panel table-list-panel">
+            <h2>Mesas</h2>
+            <div id="tableList"></div>
+          </aside>
+
+          <section class="panel table-map-panel">
+            <div class="table-map" id="tableMap"></div>
+            <div class="table-order-preview">
+              <h2>Orden de pedidos</h2>
+              <div id="tableOrderPreview"></div>
+            </div>
+          </section>
+
+          <aside class="panel cafe-menu-panel">
+            <input id="cafeProductSearch" placeholder="Buscar producto de cafeteria..." autocomplete="off">
+            <div class="cafe-product-grid" id="cafeProductGrid"></div>
+            <section class="table-ticket">
+              <h2>Pedido</h2>
+              <div id="tableTicket"></div>
+              <h2>Total: <span id="tableTotal">$ 0</span></h2>
+              <div class="table-actions">
+                <button class="soft-button" id="markDeliveredButton" type="button">Entregado</button>
+                <button class="secondary-button" id="printTableButton" type="button">Imprimir cuenta</button>
+                <button class="primary-button" id="chargeTableButton" type="button">Cobrar mesa</button>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view hidden" id="shiftView">
+        <h2>Turno de caja</h2>
+        <div class="shift-layout">
+          <section class="panel" id="shiftSummary"></section>
+          <section class="panel">
+            <h3>Gastos</h3>
+            <input id="expenseDetail" placeholder="Detalle del gasto">
+            <input id="expenseAmount" type="number" min="0" placeholder="Importe">
+            <button class="soft-button" id="addExpenseButton">Agregar gasto</button>
+            <div id="expenseList"></div>
+            <h3>Refuerzos</h3>
+            <input id="reinforcementDetail" placeholder="Detalle del refuerzo">
+            <input id="reinforcementAmount" type="number" min="0" placeholder="Importe">
+            <button class="soft-button" id="addReinforcementButton">Agregar refuerzo</button>
+            <div id="reinforcementList"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view hidden" id="productsView">
+        <h2>Productos</h2>
+        <div class="mini-products">
+          <aside class="panel mini-product-list">
+            <button class="primary-button" id="miniNewProductButton" type="button">Anadir producto</button>
+            <input id="miniProductSearch" placeholder="Buscar producto o codigo..." autocomplete="off">
+            <div id="miniProductList"></div>
+          </aside>
+          <section class="panel mini-product-editor">
+            <form id="miniProductForm">
+              <input id="miniProductId" type="hidden">
+              <h3 id="miniProductTitle">Anadir producto</h3>
+              <label>
+                Nombre del producto
+                <input id="miniNameInput" required autocomplete="off">
+              </label>
+              <div class="form-grid">
+                <label>
+                  Precio de compra
+                  <input id="miniCostInput" type="number" min="0" step="0.01" required>
+                </label>
+                <label>
+                  Precio de venta
+                  <input id="miniSaleInput" type="number" min="0" step="1">
+                </label>
+              </div>
+              <div class="form-grid">
+                <label>
+                  Codigo de barra
+                  <input id="miniBarcodeInput" autocomplete="off" placeholder="Escanea o escribi el codigo">
+                </label>
+                <label>
+                  Stock
+                  <input id="miniStockInput" type="number" step="0.001" value="0">
+                </label>
+              </div>
+              <div class="form-grid">
+                <label>
+                  Proveedor
+                  <select id="miniSupplierInput"></select>
+                </label>
+                <label>
+                  Categoria
+                  <select id="miniCategoryInput">
+                    <option value="Panaderia">Panaderia</option>
+                    <option value="Cafeteria">Cafeteria</option>
+                  </select>
+                </label>
+              </div>
+              <label class="checkbox-box">
+                <input id="miniWeighableInput" type="checkbox">
+                Producto pesable
+              </label>
+              <div class="quick-stock">
+                <button type="button" data-stock-delta="-1">-1</button>
+                <button type="button" data-stock-delta="1">+1</button>
+                <button type="button" data-stock-delta="10">+10</button>
+                <button type="button" data-stock-delta="50">+50</button>
+              </div>
+              <button class="primary-button" type="submit">Guardar producto</button>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <section class="view hidden" id="notebookView">
+        <h2>Cuaderno</h2>
+        <p id="notebookSubtitle"></p>
+        <div id="salesList"></div>
+      </section>
+
+      <section class="view hidden" id="clientsView">
+        <h2>Clientes</h2>
+        <p class="muted">Cuentas pendientes calculadas con los precios actuales.</p>
+        <div class="client-accounts" id="clientAccounts"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="paymentDialog">
+    <form class="payment-card" method="dialog" id="paymentForm">
+      <button class="round-close" type="button" id="closePayment">X</button>
+      <h2>Pago</h2>
+      <p>Total a pagar</p>
+      <strong class="payment-total" id="paymentTotal">$ 0</strong>
+      <p class="payment-status" id="paymentStatus">Faltan $ 0</p>
+      <label class="payment-row">
+        Efectivo
+        <input id="cashInput" type="number" min="0" step="1">
+      </label>
+      <label class="payment-row">
+        Transferencia / QR
+        <input id="transferInput" type="number" min="0" step="1">
+      </label>
+      <button class="primary-button" type="submit">Guardar venta</button>
+    </form>
+  </dialog>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/sales.js"></script>
+</body>
+</html>
