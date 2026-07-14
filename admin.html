@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin - Panaderia Josue V2</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/products.css">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Admin</p>
+        <h1>Productos</h1>
+      </div>
+      <nav class="top-actions">
+        <button class="secondary-button" type="button">Productos</button>
+        <button class="secondary-button" type="button">Reportes</button>
+        <a class="secondary-button" href="index.html">Inicio</a>
+      </nav>
+    </header>
+
+    <section class="products-admin">
+      <aside class="panel product-list-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Lista de productos</h2>
+            <p class="muted" id="productCount">0 productos</p>
+          </div>
+          <div class="compact-actions">
+            <button class="ghost-button" id="importProductsButton" type="button">Importar</button>
+            <button class="primary-button" id="newProductButton" type="button">Anadir</button>
+          </div>
+        </div>
+        <input id="importProductsInput" type="file" accept=".json,application/json" hidden>
+        <input id="productSearch" placeholder="Buscar producto o codigo" autocomplete="off">
+        <div class="product-list" id="productList"></div>
+      </aside>
+
+      <section class="panel editor-panel">
+        <form id="productForm">
+          <input id="productId" type="hidden">
+          <div class="panel-title-row">
+            <div>
+              <h2 id="formTitle">Anadir producto</h2>
+              <p class="muted">El precio de venta se calcula con costo x 1,3 y redondeo al $100 mas cercano.</p>
+            </div>
+            <button class="danger-button hidden" id="deleteProductButton" type="button">Borrar</button>
+          </div>
+
+          <label>
+            Nombre del producto
+            <input id="nameInput" required autocomplete="off">
+          </label>
+
+          <div class="form-grid">
+            <label>
+              Precio de compra
+              <input id="costInput" type="number" min="0" step="0.01" required>
+            </label>
+            <label>
+              Precio de venta
+              <input id="saleInput" type="number" min="0" step="1">
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Codigo de barra
+              <input id="barcodeInput" autocomplete="off" placeholder="Escanea o escribi el codigo">
+            </label>
+            <label>
+              Stock
+              <input id="stockInput" type="number" step="0.001" value="0">
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Proveedor
+              <select id="supplierInput"></select>
+            </label>
+            <label>
+              Categoria
+              <select id="categoryInput">
+                <option value="Panaderia">Panaderia</option>
+                <option value="Cafeteria">Cafeteria</option>
+              </select>
+            </label>
+          </div>
+          <label class="checkbox-box">
+            <input id="weighableInput" type="checkbox">
+            Producto pesable
+          </label>
+
+          <div class="form-actions">
+            <button class="secondary-button" id="clearFormButton" type="button">Limpiar</button>
+            <button class="primary-button" type="submit">Guardar cambios</button>
+          </div>
+        </form>
+
+        <section class="whatsapp-box">
+          <div class="panel-title-row">
+            <div>
+              <h2>Mensaje para WhatsApp</h2>
+              <p class="muted">Se agregan los productos que guardaste o modificaste.</p>
+            </div>
+            <div class="compact-actions">
+              <button class="secondary-button" id="clearWhatsappButton" type="button">Limpiar</button>
+              <button class="secondary-button" id="copyWhatsappButton" type="button">Copiar</button>
+            </div>
+          </div>
+          <textarea id="whatsappMessage" readonly placeholder="Todavia no guardaste cambios."></textarea>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/admin-products.js"></script>
+</body>
+</html>
