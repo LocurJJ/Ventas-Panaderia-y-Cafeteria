@@ -850,7 +850,6 @@ function setupEvents() {
     }
     if (storeName === TABLE_STORE && local === "Cafeteria") {
       renderCafeTables();
-      renderTableTicket();
     }
     if (storeName === CLIENT_ACCOUNT_STORE && activeView === "clients") {
       renderClients();
