@@ -236,10 +236,16 @@
 }
 
 .table-list-panel,
-.table-map-panel,
-.cafe-menu-panel {
+.table-map-panel {
   min-height: 0;
   overflow-y: auto;
+}
+
+.cafe-menu-panel {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .table-list-item {
@@ -282,6 +288,12 @@
   gap: 18px;
 }
 
+.table-order-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .table-map {
   min-height: 460px;
   border: 1px solid var(--line);
@@ -313,7 +325,11 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin: 12px 0 18px;
+  margin: 12px 0 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .cafe-product-card {
@@ -338,6 +354,14 @@
 .cafe-product-card .primary-button {
   width: 100%;
   padding: 10px;
+}
+
+.table-ticket {
+  margin-top: auto;
+  padding-top: 18px;
+  flex: 0 0 auto;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
 }
 
 .table-ticket-row {
