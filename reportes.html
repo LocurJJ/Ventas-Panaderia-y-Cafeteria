@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reportes - Panaderia Josue V2</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/products.css">
+  <link rel="stylesheet" href="css/reports.css">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Admin</p>
+        <h1>Reportes</h1>
+      </div>
+      <nav class="top-actions">
+        <a class="secondary-button" href="admin.html">Productos</a>
+        <a class="secondary-button active-nav" href="reportes.html">Reportes</a>
+        <a class="secondary-button" href="index.html">Inicio</a>
+      </nav>
+    </header>
+
+    <section class="panel reports-panel">
+      <div class="reports-toolbar">
+        <div>
+          <h2>Reporte de turnos</h2>
+          <p class="muted">Consulta como cerro cada turno y revisa el detalle de sus ventas.</p>
+        </div>
+        <label class="store-filter">
+          Ver
+          <select id="reportStoreSelect"></select>
+        </label>
+      </div>
+
+      <div class="report-summary" id="reportSummary"></div>
+      <div class="shift-report-list" id="shiftReportList"></div>
+    </section>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/admin-reports.js"></script>
+</body>
+</html>
