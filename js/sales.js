@@ -77,11 +77,17 @@ function saveTableOrders(tables) {
 
 function getTableOrder(tableId = selectedTableId) {
   const tables = getTableOrders();
-  return tables[tableId] || {
-    id: tableId,
+  const storedOrder = tables[tableId] || {};
+  const items = Array.isArray(storedOrder.items)
+    ? storedOrder.items
+    : Object.values(storedOrder.items || {});
+
+  return {
     status: "free",
-    items: [],
     createdAt: new Date().toISOString(),
+    ...storedOrder,
+    id: tableId,
+    items,
   };
 }
 
