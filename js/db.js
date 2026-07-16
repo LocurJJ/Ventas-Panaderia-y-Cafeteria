@@ -60,14 +60,15 @@ function dispatchStoreChange(name) {
 }
 
 function rememberPending(promise, label) {
-  pendingWrites.add(promise);
-  promise
+  const trackedPromise = promise
     .catch((error) => {
       console.error(`No se pudo sincronizar ${label} con Firebase`, error);
       window.dispatchEvent(new CustomEvent("panaderia:database-error", { detail: { label, error } }));
+      throw error;
     })
-    .finally(() => pendingWrites.delete(promise));
-  return promise;
+    .finally(() => pendingWrites.delete(trackedPromise));
+  pendingWrites.add(trackedPromise);
+  return trackedPromise;
 }
 
 function syncStoreToRemote(name, value) {
@@ -91,6 +92,12 @@ function removeRecordFromRemote(storeName, id) {
 function saveLocalStore(name, value) {
   cache[name] = value;
   localStorage.setItem(DB_PREFIX + name, JSON.stringify(value));
+}
+
+function hasStoreData(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return value !== null && value !== undefined && value !== "";
 }
 
 function readStore(name, fallback) {
@@ -292,7 +299,15 @@ function initRemoteSync() {
   Object.keys(STORE_DEFAULTS).forEach((name) => {
     remoteRef(name).on("value", (snapshot) => {
       const value = snapshot.val();
+      const localValue = readStore(name, fallbackFor(name));
       remoteReadyStores[name] = true;
+
+      if (!hasStoreData(value) && name === "productsById" && hasStoreData(localValue)) {
+        syncStoreToRemote(name, localValue);
+        dispatchStoreChange(name);
+        return;
+      }
+
       saveLocalStore(name, value === null ? fallbackFor(name) : value);
       dispatchStoreChange(name);
     }, (error) => {
