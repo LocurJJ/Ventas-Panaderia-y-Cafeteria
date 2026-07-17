@@ -1,0 +1,350 @@
+.arca-shell {
+  width: min(1380px, calc(100% - 40px));
+}
+
+.arca-header {
+  align-items: center;
+}
+
+.arca-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.arca-nav .active {
+  border-color: var(--blue);
+  background: #1d3270;
+}
+
+.integration-banner {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 13px 16px;
+  border: 1px solid #8a6d1d;
+  border-radius: 8px;
+  background: #3b3013;
+  color: #fde68a;
+}
+
+.integration-banner.error-banner {
+  border-color: #7f1d1d;
+  background: #3b1515;
+  color: #fecaca;
+}
+
+.arca-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.arca-toolbar h2,
+.arca-toolbar p {
+  margin: 0;
+}
+
+.arca-toolbar p {
+  margin-top: 7px;
+}
+
+.arca-toolbar label {
+  width: 220px;
+}
+
+.sales-status-summary,
+.invoice-report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sales-status-summary article,
+.invoice-report-summary article {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.sales-status-summary span,
+.invoice-report-summary span {
+  color: var(--muted);
+}
+
+.sales-status-summary strong,
+.invoice-report-summary strong {
+  font-size: 22px;
+}
+
+.summary-issued {
+  border-color: #16775a !important;
+}
+
+.summary-pending {
+  border-color: #9f3030 !important;
+}
+
+.arca-sales-list,
+.invoice-report-list {
+  display: grid;
+  gap: 10px;
+}
+
+.arca-sale-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 16px;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.arca-sale-card.is-issued {
+  border-color: #16775a;
+}
+
+.arca-sale-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+
+.arca-sale-main > div {
+  min-width: 0;
+}
+
+.arca-sale-main strong,
+.arca-sale-main small {
+  display: block;
+}
+
+.arca-sale-main small {
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.arca-sale-main .invoice-number {
+  color: #6ee7b7;
+}
+
+.arca-sale-total {
+  white-space: nowrap;
+  font-size: 18px;
+}
+
+.invoice-status {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.invoice-status.issued {
+  background: #15805e;
+}
+
+.invoice-status.pending {
+  background: #b83232;
+}
+
+.invoice-status:hover {
+  filter: brightness(1.1);
+}
+
+.arca-empty {
+  display: grid;
+  gap: 7px;
+  padding: 32px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.arca-empty strong {
+  color: var(--text);
+}
+
+.invoice-dialog-card {
+  width: min(760px, 94vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.invoice-dialog-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.invoice-dialog-head h2 {
+  margin: 0;
+}
+
+.round-close {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: white;
+  cursor: pointer;
+}
+
+.invoice-sale-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.invoice-sale-info span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.invoice-fixed-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.invoice-fixed-grid input[readonly] {
+  color: #d7e0ee;
+  background: #172237;
+}
+
+.vat-choice {
+  margin-top: 14px;
+}
+
+.invoice-totals {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.invoice-totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.invoice-total-line {
+  font-size: 20px;
+}
+
+.invoice-message {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #3b1515;
+  color: #fecaca;
+}
+
+.invoice-message.info {
+  background: #15274b;
+  color: #bfdbfe;
+}
+
+.invoice-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.invoice-dialog-actions button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.invoice-result-card {
+  width: min(560px, 94vw);
+}
+
+.authorized-box {
+  display: grid;
+  gap: 7px;
+  padding: 18px;
+  margin-bottom: 14px;
+  border: 1px solid #27936f;
+  border-radius: 8px;
+  background: #143c31;
+  color: #a7f3d0;
+}
+
+.authorized-box strong {
+  font-size: 18px;
+}
+
+.invoice-link,
+.new-invoice-button {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+.new-invoice-button {
+  margin-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .arca-header,
+  .arca-toolbar,
+  .arca-sale-main,
+  .invoice-sale-info {
+    display: grid;
+  }
+
+  .arca-nav {
+    margin-top: 18px;
+  }
+
+  .arca-toolbar label {
+    width: 100%;
+  }
+
+  .sales-status-summary,
+  .invoice-report-summary,
+  .invoice-fixed-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .arca-sale-card {
+    grid-template-columns: 1fr;
+  }
+
+  .arca-sale-total {
+    margin-top: 6px;
+  }
+
+  .integration-banner {
+    display: grid;
+  }
+}
