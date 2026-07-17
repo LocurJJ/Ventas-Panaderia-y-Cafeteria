@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARCA - Panaderia Josue V2</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/arca.css">
+</head>
+<body>
+  <main class="page-shell arca-shell">
+    <header class="page-header arca-header">
+      <div>
+        <p class="eyebrow">Facturacion electronica</p>
+        <h1>ARCA</h1>
+      </div>
+      <nav class="arca-nav">
+        <button class="secondary-button active" type="button" data-arca-view="sales">Vender</button>
+        <button class="secondary-button" type="button" data-arca-view="reports">Reportes</button>
+        <a class="secondary-button" href="https://portalcf.cloud.afip.gob.ar/portal/app/" target="_blank" rel="noopener noreferrer">Portal ARCA</a>
+        <a class="secondary-button" href="index.html">Inicio</a>
+      </nav>
+    </header>
+
+    <section class="integration-banner" id="integrationBanner">
+      <strong>Modulo preparado</strong>
+      <span>La emision fiscal se habilitara cuando se conecte el servidor seguro de ARCA.</span>
+    </section>
+
+    <section class="arca-view" id="salesView">
+      <div class="arca-toolbar panel">
+        <div>
+          <h2>Ventas del cuaderno</h2>
+          <p class="muted">Selecciona una venta para preparar su Factura B.</p>
+        </div>
+        <label>
+          Local
+          <select id="arcaStoreSelect">
+            <option value="Central">Central</option>
+            <option value="Sucursal">Sucursal</option>
+            <option value="Cafeteria">Cafeteria</option>
+          </select>
+        </label>
+      </div>
+      <div class="sales-status-summary" id="salesStatusSummary"></div>
+      <div class="arca-sales-list" id="arcaSalesList"></div>
+    </section>
+
+    <section class="arca-view hidden" id="reportsView">
+      <div class="arca-toolbar panel">
+        <div>
+          <h2>Reporte de facturacion</h2>
+          <p class="muted">Compara ventas facturadas y pendientes por local.</p>
+        </div>
+        <label>
+          Estado
+          <select id="invoiceStatusFilter">
+            <option value="all">Todas</option>
+            <option value="issued">Facturadas</option>
+            <option value="pending">No facturadas</option>
+          </select>
+        </label>
+      </div>
+      <div class="invoice-report-summary" id="invoiceReportSummary"></div>
+      <div class="invoice-report-list" id="invoiceReportList"></div>
+    </section>
+  </main>
+
+  <dialog id="invoiceDialog">
+    <form class="invoice-dialog-card" id="invoiceForm">
+      <div class="invoice-dialog-head">
+        <div>
+          <p class="eyebrow">Comprobante electronico</p>
+          <h2>Confirmar Factura B</h2>
+        </div>
+        <button class="round-close" id="closeInvoiceDialog" type="button" aria-label="Cerrar">X</button>
+      </div>
+
+      <div class="invoice-sale-info" id="invoiceSaleInfo"></div>
+
+      <div class="invoice-fixed-grid">
+        <label>
+          Fecha
+          <input id="invoiceDate" readonly>
+        </label>
+        <label>
+          Receptor
+          <input value="Consumidor final" readonly>
+        </label>
+        <label>
+          Producto / servicio
+          <input value="Producto de panaderia" readonly>
+        </label>
+        <label>
+          Forma de pago
+          <input id="invoicePayment" readonly>
+        </label>
+        <label>
+          Cantidad
+          <input value="1" readonly>
+        </label>
+        <label>
+          Unidad de medida
+          <input value="Unidades" readonly>
+        </label>
+      </div>
+
+      <label class="vat-choice">
+        Alicuota de IVA
+        <select id="invoiceVatRate">
+          <option value="10.5">10,5 %</option>
+          <option value="21">21 %</option>
+        </select>
+      </label>
+
+      <div class="invoice-totals" id="invoiceTotals"></div>
+      <p class="invoice-message hidden" id="invoiceMessage"></p>
+
+      <div class="invoice-dialog-actions">
+        <button class="secondary-button" id="cancelInvoice" type="button">Cancelar</button>
+        <button class="primary-button" id="confirmInvoice" type="submit">Confirmar factura</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="invoiceResultDialog">
+    <section class="invoice-dialog-card invoice-result-card">
+      <div class="invoice-dialog-head">
+        <div>
+          <p class="eyebrow">ARCA</p>
+          <h2>Comprobante autorizado</h2>
+        </div>
+        <button class="round-close" id="closeInvoiceResult" type="button" aria-label="Cerrar">X</button>
+      </div>
+      <div class="authorized-box" id="authorizedBox"></div>
+      <a class="primary-button invoice-link hidden" id="openInvoiceLink" target="_blank" rel="noopener noreferrer">Abrir factura / PDF</a>
+      <button class="secondary-button new-invoice-button" id="newInvoiceButton" type="button">Nuevo comprobante</button>
+    </section>
+  </dialog>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/arca.js"></script>
+</body>
+</html>
