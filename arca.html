@@ -23,8 +23,8 @@
     </header>
 
     <section class="integration-banner" id="integrationBanner">
-      <strong>Modulo preparado</strong>
-      <span>La emision fiscal se habilitara cuando se conecte el servidor seguro de ARCA.</span>
+      <strong>Conectando con ARCA...</strong>
+      <span>Verificando el servidor seguro de homologacion.</span>
     </section>
 
     <section class="arca-view" id="salesView">
@@ -57,6 +57,7 @@
           <select id="invoiceStatusFilter">
             <option value="all">Todas</option>
             <option value="issued">Facturadas</option>
+            <option value="test_issued">Pruebas ARCA</option>
             <option value="pending">No facturadas</option>
           </select>
         </label>
@@ -128,7 +129,7 @@
       <div class="invoice-dialog-head">
         <div>
           <p class="eyebrow">ARCA</p>
-          <h2>Comprobante autorizado</h2>
+          <h2 id="invoiceResultTitle">Comprobante autorizado</h2>
         </div>
         <button class="round-close" id="closeInvoiceResult" type="button" aria-label="Cerrar">X</button>
       </div>
