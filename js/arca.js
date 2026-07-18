@@ -1,6 +1,8 @@
 const { listSales, upsertById } = window.DB;
 
-const ARCA_API_URL = String(window.ARCA_API_URL || "").replace(/\/$/, "");
+const ARCA_API_URL = String(
+  window.ARCA_API_URL || "https://southamerica-east1-cafeteriaypanaderia.cloudfunctions.net/arcaApi",
+).replace(/\/$/, "");
 const $ = (id) => document.getElementById(id);
 
 let sales = [];
@@ -43,7 +45,16 @@ function invoiceFor(sale) {
 
 function isInvoiced(sale) {
   const invoice = invoiceFor(sale);
-  return invoice?.status === "issued" && !!invoice.cae;
+  return invoice?.status === "issued" && invoice?.mode !== "homologacion" && !!invoice.cae;
+}
+
+function isTestInvoiced(sale) {
+  const invoice = invoiceFor(sale);
+  return invoice?.status === "test_issued" && !!invoice.cae;
+}
+
+function hasArcaReceipt(sale) {
+  return isInvoiced(sale) || isTestInvoiced(sale);
 }
 
 function paymentText(sale) {
@@ -86,15 +97,20 @@ function statusButton(sale) {
   if (isInvoiced(sale)) {
     return `<button class="invoice-status issued" type="button" data-invoice-sale-id="${escapeHtml(sale.id)}">Facturada</button>`;
   }
+  if (isTestInvoiced(sale)) {
+    return `<button class="invoice-status test-issued" type="button" data-invoice-sale-id="${escapeHtml(sale.id)}">Prueba ARCA</button>`;
+  }
   return `<button class="invoice-status pending" type="button" data-invoice-sale-id="${escapeHtml(sale.id)}">No facturada</button>`;
 }
 
 function renderSalesSummary(rows) {
   const issued = rows.filter(isInvoiced);
-  const pending = rows.filter((sale) => !isInvoiced(sale));
+  const tests = rows.filter(isTestInvoiced);
+  const pending = rows.filter((sale) => !hasArcaReceipt(sale));
   $("salesStatusSummary").innerHTML = `
     <article><span>Ventas</span><strong>${rows.length}</strong></article>
     <article class="summary-issued"><span>Facturadas</span><strong>${issued.length}</strong></article>
+    <article class="summary-test"><span>Pruebas ARCA</span><strong>${tests.length}</strong></article>
     <article class="summary-pending"><span>No facturadas</span><strong>${pending.length}</strong></article>
   `;
 }
@@ -102,13 +118,14 @@ function renderSalesSummary(rows) {
 function saleCard(sale) {
   const invoice = invoiceFor(sale);
   return `
-    <article class="arca-sale-card ${isInvoiced(sale) ? "is-issued" : ""}">
+    <article class="arca-sale-card ${isInvoiced(sale) ? "is-issued" : isTestInvoiced(sale) ? "is-test-issued" : ""}">
       <div class="arca-sale-main">
         <div>
           <strong>Venta ${escapeHtml(sale.saleNumber || "-")}${sale.tableId ? ` - Mesa ${escapeHtml(String(sale.tableId).replace("mesa_", ""))}` : ""}</strong>
           <small>${dateText(sale.date)} | ${escapeHtml(sale.local || "-")} | ${escapeHtml(paymentText(sale))}</small>
           <small>${escapeHtml(saleItemsText(sale))}</small>
           ${isInvoiced(sale) ? `<small class="invoice-number">Factura ${escapeHtml(invoice.invoiceNumber || "-")} | CAE ${escapeHtml(invoice.cae)}</small>` : ""}
+          ${isTestInvoiced(sale) ? `<small class="test-invoice-number">Prueba sin validez fiscal ${escapeHtml(invoice.invoiceNumber || "-")} | CAE ${escapeHtml(invoice.cae)}</small>` : ""}
         </div>
         <strong class="arca-sale-total">${money(sale.total)}</strong>
       </div>
@@ -130,14 +147,17 @@ function renderReports() {
   const store = $("arcaStoreSelect").value;
   const storeRows = sales.filter((sale) => sale.local === store);
   const issued = storeRows.filter(isInvoiced);
-  const pending = storeRows.filter((sale) => !isInvoiced(sale));
-  const rows = status === "issued" ? issued : status === "pending" ? pending : storeRows;
+  const tests = storeRows.filter(isTestInvoiced);
+  const pending = storeRows.filter((sale) => !hasArcaReceipt(sale));
+  const rows = status === "issued" ? issued : status === "test_issued" ? tests : status === "pending" ? pending : storeRows;
   const issuedTotal = issued.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+  const testTotal = tests.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   const pendingTotal = pending.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
 
   $("invoiceReportSummary").innerHTML = `
     <article><span>Total vendido</span><strong>${money(storeRows.reduce((sum, sale) => sum + Number(sale.total || 0), 0))}</strong></article>
     <article class="summary-issued"><span>Total facturado</span><strong>${money(issuedTotal)}</strong></article>
+    <article class="summary-test"><span>Homologacion</span><strong>${money(testTotal)}</strong></article>
     <article class="summary-pending"><span>Pendiente</span><strong>${money(pendingTotal)}</strong></article>
   `;
   $("invoiceReportList").innerHTML = rows.length === 0
@@ -182,8 +202,10 @@ function renderInvoiceTotals() {
 function showInvoiceResult(sale) {
   const invoice = invoiceFor(sale);
   if (!invoice) return;
+  const isTest = isTestInvoiced(sale);
+  $("invoiceResultTitle").textContent = isTest ? "Comprobante de prueba autorizado" : "Comprobante autorizado";
   $("authorizedBox").innerHTML = `
-    <strong>Comprobante autorizado</strong>
+    <strong>${isTest ? "Homologacion - sin validez fiscal" : "Comprobante autorizado"}</strong>
     <span>Factura B ${escapeHtml(invoice.invoiceNumber || "-")}</span>
     <span>CAE ${escapeHtml(invoice.cae || "-")}</span>
     <span>${invoice.issuedAt ? dateText(invoice.issuedAt) : ""}</span>
@@ -198,7 +220,7 @@ function showInvoiceResult(sale) {
 function openInvoiceDialog(saleId) {
   const sale = sales.find((item) => item.id === saleId);
   if (!sale) return;
-  if (isInvoiced(sale)) {
+  if (hasArcaReceipt(sale)) {
     showInvoiceResult(sale);
     return;
   }
@@ -252,7 +274,7 @@ function showInvoiceMessage(text, type = "error") {
 
 async function confirmInvoice() {
   const sale = currentSale();
-  if (!sale || isInvoiced(sale)) return;
+  if (!sale || hasArcaReceipt(sale)) return;
 
   if (!ARCA_API_URL) {
     showInvoiceMessage("La pantalla ya esta lista. Falta conectar el servidor seguro de ARCA para emitir un CAE real; la venta continua como No facturada.");
@@ -267,7 +289,10 @@ async function confirmInvoice() {
   try {
     const response = await fetch(`${ARCA_API_URL}/invoices`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-ARCA-Mode": "homologacion",
+      },
       body: JSON.stringify(invoicePayload(sale)),
     });
     const result = await response.json().catch(() => ({}));
@@ -277,7 +302,9 @@ async function confirmInvoice() {
     const updatedSale = upsertById("salesById", {
       ...sale,
       invoice: {
-        status: "issued",
+        status: result.status || (result.mode === "homologacion" ? "test_issued" : "issued"),
+        mode: result.mode || "homologacion",
+        fiscalValidity: result.mode !== "homologacion",
         invoiceType: "B",
         invoiceNumber: result.invoiceNumber,
         pointOfSale: result.pointOfSale || "",
@@ -298,6 +325,21 @@ async function confirmInvoice() {
   } finally {
     button.disabled = false;
     button.textContent = "Confirmar factura";
+  }
+}
+
+async function checkArcaConnection() {
+  const banner = $("integrationBanner");
+  try {
+    const response = await fetch(`${ARCA_API_URL}/health`);
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error("Servidor no disponible");
+    banner.classList.remove("error-banner");
+    banner.classList.add("test-banner");
+    banner.innerHTML = "<strong>ARCA conectado - modo homologacion</strong><span>Los comprobantes emitidos ahora son pruebas sin validez fiscal.</span>";
+  } catch (error) {
+    banner.classList.add("error-banner");
+    banner.innerHTML = "<strong>No se pudo conectar con ARCA.</strong><span>Intenta nuevamente en unos minutos; ninguna venta sera marcada como facturada.</span>";
   }
 }
 
@@ -337,3 +379,4 @@ window.addEventListener("panaderia:database-error", () => {
 refreshSales();
 renderAll();
 showView(activeArcaView);
+checkArcaConnection();
