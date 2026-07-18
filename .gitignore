@@ -1,0 +1,5 @@
+functions/node_modules/
+functions/tmp/
+.env
+*.key
+*.crt
