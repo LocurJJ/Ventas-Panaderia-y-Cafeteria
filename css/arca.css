@@ -35,6 +35,12 @@
   color: #fecaca;
 }
 
+.integration-banner.test-banner {
+  border-color: #a56a12;
+  background: #3d2c10;
+  color: #fde68a;
+}
+
 .arca-toolbar {
   display: flex;
   justify-content: space-between;
@@ -59,7 +65,7 @@
 .sales-status-summary,
 .invoice-report-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
   margin-bottom: 14px;
 }
@@ -92,6 +98,10 @@
   border-color: #9f3030 !important;
 }
 
+.summary-test {
+  border-color: #c27b16 !important;
+}
+
 .arca-sales-list,
 .invoice-report-list {
   display: grid;
@@ -111,6 +121,10 @@
 
 .arca-sale-card.is-issued {
   border-color: #16775a;
+}
+
+.arca-sale-card.is-test-issued {
+  border-color: #c27b16;
 }
 
 .arca-sale-main {
@@ -138,6 +152,10 @@
   color: #6ee7b7;
 }
 
+.arca-sale-main .test-invoice-number {
+  color: #fcd34d;
+}
+
 .arca-sale-total {
   white-space: nowrap;
   font-size: 18px;
@@ -159,6 +177,10 @@
 
 .invoice-status.pending {
   background: #b83232;
+}
+
+.invoice-status.test-issued {
+  background: #b26a0b;
 }
 
 .invoice-status:hover {
