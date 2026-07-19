@@ -1,7 +1,7 @@
 const { listSales, upsertById } = window.DB;
 
 const ARCA_API_URL = String(
-  window.ARCA_API_URL || "https://southamerica-east1-cafeteriaypanaderia.cloudfunctions.net/arcaApi",
+  window.ARCA_API_URL || "http://127.0.0.1:8765",
 ).replace(/\/$/, "");
 const $ = (id) => document.getElementById(id);
 
@@ -291,7 +291,7 @@ async function confirmInvoice() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ARCA-Mode": "homologacion",
+        "X-ARCA-Confirm": sale.id,
       },
       body: JSON.stringify(invoicePayload(sale)),
     });
@@ -334,12 +334,25 @@ async function checkArcaConnection() {
     const response = await fetch(`${ARCA_API_URL}/health`);
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error("Servidor no disponible");
+    if (!result.credentialsReady) {
+      banner.classList.add("error-banner");
+      banner.innerHTML = "<strong>Facturador local sin certificado.</strong><span>Ejecuta el instalador y selecciona el certificado y la clave privada.</span>";
+      return;
+    }
+    if (!result.enabled) {
+      banner.classList.remove("error-banner");
+      banner.classList.add("test-banner");
+      banner.innerHTML = `<strong>Facturador local instalado - emision pausada</strong><span>${result.mode === "produccion" ? "Produccion" : "Homologacion"}, punto de venta ${escapeHtml(result.pointOfSale)}. Falta habilitarlo despues de la prueba final.</span>`;
+      return;
+    }
     banner.classList.remove("error-banner");
-    banner.classList.add("test-banner");
-    banner.innerHTML = "<strong>ARCA conectado - modo homologacion</strong><span>Los comprobantes emitidos ahora son pruebas sin validez fiscal.</span>";
+    banner.classList.toggle("test-banner", result.mode === "homologacion");
+    banner.innerHTML = result.mode === "produccion"
+      ? `<strong>Facturador local conectado - produccion</strong><span>Punto de venta ${escapeHtml(result.pointOfSale)}. Los comprobantes tendran validez fiscal.</span>`
+      : `<strong>Facturador local conectado - homologacion</strong><span>Punto de venta ${escapeHtml(result.pointOfSale)}. Los comprobantes son pruebas sin validez fiscal.</span>`;
   } catch (error) {
     banner.classList.add("error-banner");
-    banner.innerHTML = "<strong>No se pudo conectar con ARCA.</strong><span>Intenta nuevamente en unos minutos; ninguna venta sera marcada como facturada.</span>";
+    banner.innerHTML = "<strong>El facturador local esta apagado.</strong><span>Abre Facturador ARCA desde el Escritorio de esta computadora. Ninguna venta sera marcada como facturada.</span>";
   }
 }
 
@@ -380,3 +393,4 @@ refreshSales();
 renderAll();
 showView(activeArcaView);
 checkArcaConnection();
+
