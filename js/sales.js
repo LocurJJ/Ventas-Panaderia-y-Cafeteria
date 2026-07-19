@@ -283,6 +283,10 @@ function renderSelectedTable() {
     : items.map((item) => `
       <div class="table-ticket-row">
         <span>${item.quantity} x ${item.name}</span>
+        <label class="table-item-price">
+          <small>Precio c/u</small>
+          <input type="number" min="0" step="1" value="${Number(item.unitPrice || 0)}" data-table-item-price="${item.id}" aria-label="Precio unitario de ${item.name}">
+        </label>
         <strong>${money(item.total)}</strong>
         <button class="delete-button" type="button" data-table-item-id="${item.id}">-</button>
       </div>
@@ -326,6 +330,23 @@ function removeCafeItem(itemId) {
   const order = getTableOrder();
   order.items = (order.items || []).filter((item) => item.id !== itemId);
   order.status = order.items.length > 0 ? order.status : "free";
+  saveTableOrder(order);
+  renderCafeTables();
+}
+
+function updateCafeItemPrice(itemId, rawPrice) {
+  const unitPrice = Number(rawPrice);
+  if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+    alert("Ingresa un precio valido.");
+    renderSelectedTable();
+    return;
+  }
+
+  const order = getTableOrder();
+  const item = (order.items || []).find((entry) => entry.id === itemId);
+  if (!item) return;
+  item.unitPrice = unitPrice;
+  item.total = Math.round(Number(item.quantity || 0) * unitPrice);
   saveTableOrder(order);
   renderCafeTables();
 }
@@ -940,6 +961,19 @@ function setupEvents() {
     if (button) removeCafeItem(button.dataset.tableItemId);
   });
 
+  $("tableTicket").addEventListener("change", (event) => {
+    const input = event.target.closest("[data-table-item-price]");
+    if (input) updateCafeItemPrice(input.dataset.tableItemPrice, input.value);
+  });
+
+  $("tableTicket").addEventListener("keydown", (event) => {
+    const input = event.target.closest("[data-table-item-price]");
+    if (input && event.key === "Enter") {
+      event.preventDefault();
+      input.blur();
+    }
+  });
+
   $("markDeliveredButton").addEventListener("click", markTableDelivered);
   $("printTableButton").addEventListener("click", printTableTicket);
   $("chargeTableButton").addEventListener("click", openTablePayment);
@@ -1034,3 +1068,4 @@ function init() {
 }
 
 init();
+
