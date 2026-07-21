@@ -108,6 +108,50 @@
   gap: 10px;
 }
 
+.arca-day-group {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.arca-day-group:last-child {
+  margin-bottom: 0;
+}
+
+.arca-day-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 15px;
+  border: 1px solid #345078;
+  border-radius: 8px;
+  background: #18263b;
+}
+
+.arca-day-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.arca-day-header > div > strong {
+  text-transform: capitalize;
+}
+
+.arca-day-header small {
+  color: var(--muted);
+}
+
+.arca-day-header > strong {
+  white-space: nowrap;
+  font-size: 18px;
+}
+
+.arca-day-sales {
+  display: grid;
+  gap: 10px;
+}
+
 .arca-sale-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 150px;
