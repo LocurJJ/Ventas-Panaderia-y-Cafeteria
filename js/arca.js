@@ -39,6 +39,34 @@ function todayText() {
   return new Date().toLocaleDateString("es-AR");
 }
 
+function saleDayKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "sin-fecha";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function saleDayLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const formatted = date.toLocaleDateString("es-AR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+  if (saleDayKey(date) === saleDayKey(today)) return `Hoy · ${formatted}`;
+  if (saleDayKey(date) === saleDayKey(yesterday)) return `Ayer · ${formatted}`;
+  return formatted;
+}
+
 function invoiceFor(sale) {
   return sale?.invoice || sale?.arcaInvoice || null;
 }
@@ -134,12 +162,42 @@ function saleCard(sale) {
   `;
 }
 
+function renderSalesByDay(rows) {
+  const orderedRows = [...rows].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const groups = new Map();
+
+  orderedRows.forEach((sale) => {
+    const key = saleDayKey(sale.date);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(sale);
+  });
+
+  return [...groups.values()].map((daySales) => {
+    const total = daySales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+    const count = daySales.length;
+    return `
+      <section class="arca-day-group">
+        <header class="arca-day-header">
+          <div>
+            <strong>${escapeHtml(saleDayLabel(daySales[0]?.date))}</strong>
+            <small>${count} ${count === 1 ? "venta" : "ventas"}</small>
+          </div>
+          <strong>${money(total)}</strong>
+        </header>
+        <div class="arca-day-sales">
+          ${daySales.map(saleCard).join("")}
+        </div>
+      </section>
+    `;
+  }).join("");
+}
+
 function renderSales() {
   const rows = selectedStoreSales();
   renderSalesSummary(rows);
   $("arcaSalesList").innerHTML = rows.length === 0
     ? `<div class="arca-empty"><strong>No hay ventas en ${escapeHtml($("arcaStoreSelect").value)}.</strong><span>Las ventas guardadas en el cuaderno apareceran aca.</span></div>`
-    : rows.map(saleCard).join("");
+    : renderSalesByDay(rows);
 }
 
 function renderReports() {
@@ -162,7 +220,7 @@ function renderReports() {
   `;
   $("invoiceReportList").innerHTML = rows.length === 0
     ? `<div class="arca-empty"><strong>No hay comprobantes para este filtro.</strong></div>`
-    : rows.map(saleCard).join("");
+    : renderSalesByDay(rows);
 }
 
 function renderAll() {
