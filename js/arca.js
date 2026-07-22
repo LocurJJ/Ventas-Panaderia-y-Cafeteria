@@ -422,6 +422,27 @@ $("arcaStoreSelect").addEventListener("change", renderAll);
 $("invoiceStatusFilter").addEventListener("change", renderReports);
 $("invoiceVatRate").addEventListener("change", renderInvoiceTotals);
 
+document.addEventListener("keydown", (event) => {
+  const dialog = $("invoiceDialog");
+  if (!dialog.open || event.ctrlKey || event.altKey || event.metaKey) return;
+
+  if (event.key.toLowerCase() === "l") {
+    if (event.repeat) return;
+    event.preventDefault();
+    const vatSelect = $("invoiceVatRate");
+    vatSelect.value = vatSelect.value === "10.5" ? "21" : "10.5";
+    vatSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    return;
+  }
+
+  if (event.key === "Enter") {
+    const confirmButton = $("confirmInvoice");
+    if (confirmButton.disabled) return;
+    event.preventDefault();
+    $("invoiceForm").requestSubmit();
+  }
+});
+
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-invoice-sale-id]");
   if (button) openInvoiceDialog(button.dataset.invoiceSaleId);
