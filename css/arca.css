@@ -309,6 +309,26 @@
   margin-top: 14px;
 }
 
+.arca-shortcut-hint {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.arca-shortcut-hint kbd {
+  display: inline-block;
+  min-width: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  text-align: center;
+}
+
 .invoice-totals {
   margin-top: 16px;
   border-top: 1px solid var(--line);
