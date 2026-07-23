@@ -143,13 +143,19 @@ function renderSalesSummary(rows) {
   `;
 }
 
+function salePlaceSuffix(sale) {
+  if (!sale.tableId) return "";
+  if (sale.tableId === "caja") return " - Caja";
+  return ` - Mesa ${String(sale.tableId).replace("mesa_", "")}`;
+}
+
 function saleCard(sale) {
   const invoice = invoiceFor(sale);
   return `
     <article class="arca-sale-card ${isInvoiced(sale) ? "is-issued" : isTestInvoiced(sale) ? "is-test-issued" : ""}">
       <div class="arca-sale-main">
         <div>
-          <strong>Venta ${escapeHtml(sale.saleNumber || "-")}${sale.tableId ? ` - Mesa ${escapeHtml(String(sale.tableId).replace("mesa_", ""))}` : ""}</strong>
+          <strong>Venta ${escapeHtml(sale.saleNumber || "-")}${escapeHtml(salePlaceSuffix(sale))}</strong>
           <small>${dateText(sale.date)} | ${escapeHtml(sale.local || "-")} | ${escapeHtml(paymentText(sale))}</small>
           <small>${escapeHtml(saleItemsText(sale))}</small>
           ${isInvoiced(sale) ? `<small class="invoice-number">Factura ${escapeHtml(invoice.invoiceNumber || "-")} | CAE ${escapeHtml(invoice.cae)}</small>` : ""}
