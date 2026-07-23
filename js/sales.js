@@ -32,7 +32,7 @@ let selectedTableId = "mesa_1";
 let paymentTarget = "cart";
 let isSavingSale = false;
 
-const TABLE_COUNT = 8;
+const TABLE_IDS = [...Array.from({ length: 10 }, (_, index) => `mesa_${index + 1}`), "caja"];
 const TABLE_STORE = "cafeTablesByLocal";
 const CLIENT_ACCOUNT_STORE = "clientAccountsById";
 
@@ -216,8 +216,19 @@ function renderProducts() {
   `).join("");
 }
 
+function isCashRegister(tableId = selectedTableId) {
+  return tableId === "caja";
+}
+
 function tableLabel(tableId) {
+  if (isCashRegister(tableId)) return "CAJA";
   return `Mesa ${String(tableId || "").replace("mesa_", "")}`;
+}
+
+function tableMapLabel(tableId) {
+  return isCashRegister(tableId)
+    ? "CAJA"
+    : String(tableId || "").replace("mesa_", "");
 }
 
 function statusLabel(status) {
@@ -228,10 +239,7 @@ function statusLabel(status) {
 
 function renderCafeTables() {
   const tables = getTableOrders();
-  const tableItems = Array.from({ length: TABLE_COUNT }, (_, index) => {
-    const id = `mesa_${index + 1}`;
-    return tables[id] || getTableOrder(id);
-  });
+  const tableItems = TABLE_IDS.map((id) => tables[id] || getTableOrder(id));
 
   $("tableList").innerHTML = tableItems.map((table) => `
     <button class="table-list-item ${table.id === selectedTableId ? "active" : ""} ${table.status}" type="button" data-table-id="${table.id}">
@@ -241,8 +249,8 @@ function renderCafeTables() {
   `).join("");
 
   $("tableMap").innerHTML = tableItems.map((table) => `
-    <button class="table-dot ${table.id === selectedTableId ? "active" : ""} ${table.status}" type="button" data-table-id="${table.id}">
-      ${String(table.id).replace("mesa_", "")}
+    <button class="table-dot ${isCashRegister(table.id) ? "cash-register" : ""} ${table.id === selectedTableId ? "active" : ""} ${table.status}" type="button" data-table-id="${table.id}">
+      ${tableMapLabel(table.id)}
     </button>
   `).join("");
 
@@ -272,6 +280,8 @@ function renderCafeProducts() {
 function renderSelectedTable() {
   const order = getTableOrder();
   $("selectedTableTitle").textContent = `${tableLabel(selectedTableId)} - ${statusLabel(order.status)}`;
+  $("markDeliveredButton").classList.toggle("hidden", isCashRegister());
+  $("chargeTableButton").textContent = isCashRegister() ? "Cobrar caja" : "Cobrar mesa";
   const items = order.items || [];
 
   $("tableOrderPreview").innerHTML = items.length === 0
@@ -362,7 +372,7 @@ function markTableDelivered() {
 function printTableTicket() {
   const order = getTableOrder();
   if ((order.items || []).length === 0) {
-    alert("La mesa no tiene productos.");
+    alert(`${tableLabel(selectedTableId)} no tiene productos.`);
     return;
   }
   const lines = order.items.map((item) => `${item.quantity} x ${item.name} - ${money(item.total)}`).join("\n");
@@ -628,7 +638,7 @@ async function saveCurrentSale() {
     shiftId: shift.id,
     date: new Date().toISOString(),
     client: $("clientSelect").value,
-    origin: paymentTarget === "table" ? "Mesa" : "Mostrador",
+    origin: paymentTarget === "table" ? (isCashRegister() ? "Caja" : "Mesa") : "Mostrador",
     tableId: paymentTarget === "table" ? selectedTableId : "",
     items: paymentTarget === "table"
       ? getTableOrder().items.map((item) => ({ ...item }))
