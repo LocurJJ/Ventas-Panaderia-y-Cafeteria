@@ -13,6 +13,7 @@ const STORE_DEFAULTS = {
 const cache = {};
 const remoteReadyStores = {};
 const pendingWrites = new Set();
+const REMOTE_ONLY_STORES = new Set(["salesById"]);
 
 const suppliers = [
   "Oscar",
@@ -91,7 +92,27 @@ function removeRecordFromRemote(storeName, id) {
 
 function saveLocalStore(name, value) {
   cache[name] = value;
-  localStorage.setItem(DB_PREFIX + name, JSON.stringify(value));
+  const storageKey = DB_PREFIX + name;
+
+  // El historial de ventas crece sin limite y supera rapidamente la cuota
+  // de localStorage. Firebase conserva el historial completo; en el navegador
+  // solo mantenemos la copia en memoria de la sesion.
+  if (REMOTE_ONLY_STORES.has(name)) {
+    localStorage.removeItem(storageKey);
+    return;
+  }
+
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(value));
+  } catch (error) {
+    const quotaExceeded = error?.name === "QuotaExceededError"
+      || error?.code === 22
+      || error?.code === 1014;
+    if (!quotaExceeded) throw error;
+
+    // Una copia local llena nunca debe impedir la escritura remota.
+    console.warn(`No se pudo guardar ${name} en localStorage por falta de espacio.`);
+  }
 }
 
 function hasStoreData(value) {
