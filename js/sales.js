@@ -32,7 +32,7 @@ let selectedTableId = "mesa_1";
 let paymentTarget = "cart";
 let isSavingSale = false;
 
-const TABLE_IDS = [...Array.from({ length: 10 }, (_, index) => `mesa_${index + 1}`), "caja"];
+const TABLE_IDS = [...Array.from({ length: 15 }, (_, index) => `mesa_${index + 1}`), "caja"];
 const TABLE_STORE = "cafeTablesByLocal";
 const CLIENT_ACCOUNT_STORE = "clientAccountsById";
 
