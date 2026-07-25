@@ -299,10 +299,10 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   display: grid;
-  grid-template-columns: repeat(3, 88px);
+  grid-template-columns: repeat(4, 82px);
   align-content: center;
   justify-content: center;
-  gap: 42px;
+  gap: 26px;
   background: var(--panel-2);
 }
 
