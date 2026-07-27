@@ -185,6 +185,85 @@
   color: var(--text);
 }
 
+
+.expense-day-list {
+  display: grid;
+  gap: 16px;
+}
+
+.expense-day {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.expense-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 17px;
+  border-bottom: 1px solid var(--line);
+  background: #172237;
+}
+
+.expense-day-head > div {
+  display: grid;
+  gap: 5px;
+}
+
+.expense-day-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.expense-day-head > strong {
+  font-size: 19px;
+}
+
+.expense-rows {
+  display: grid;
+}
+
+.expense-row {
+  display: grid;
+  grid-template-columns: 80px 110px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 17px;
+  border-bottom: 1px solid var(--line);
+}
+
+.expense-row:last-child {
+  border-bottom: 0;
+}
+
+.expense-row time {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.expense-local {
+  display: inline-flex;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #1d3270;
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.expense-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.expense-row > strong {
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
   .reports-toolbar,
   .shift-report-head {
@@ -205,5 +284,18 @@
 
   .report-dates {
     display: grid;
+  }
+
+  .expense-day-head {
+    align-items: flex-start;
+  }
+
+  .expense-row {
+    grid-template-columns: 64px 90px minmax(0, 1fr);
+  }
+
+  .expense-row > strong {
+    grid-column: 2 / -1;
+    text-align: right;
   }
 }
