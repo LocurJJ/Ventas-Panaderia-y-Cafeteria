@@ -1,6 +1,7 @@
 const { listByStore, listSales } = window.DB;
 
 const DEFAULT_STORES = ["Central", "Cafeteria"];
+const EXPENSES_VIEW = "__expenses__";
 const $ = (id) => document.getElementById(id);
 
 let expandedShiftId = "";
@@ -71,9 +72,12 @@ function stores() {
 function fillStoreSelect() {
   const select = $("reportStoreSelect");
   const previous = select.value;
-  select.innerHTML = stores().map((store) => (
-    `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`
-  )).join("");
+  select.innerHTML = [
+    ...stores().map((store) => (
+      `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`
+    )),
+    `<option value="${EXPENSES_VIEW}">Gastos</option>`,
+  ].join("");
   if ([...select.options].some((option) => option.value === previous)) {
     select.value = previous;
   }
@@ -160,8 +164,115 @@ function renderSummary(rows) {
   `;
 }
 
+
+function expenseDayKey(value) {
+  if (!value) return "sin-fecha";
+  return new Date(value).toLocaleDateString("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
+
+function expenseDayLabel(value) {
+  if (!value) return "Sin fecha registrada";
+  const text = new Date(value).toLocaleDateString("es-AR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function expenseTime(value) {
+  if (!value) return "Sin hora";
+  return new Date(value).toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function allExpenses() {
+  return listByStore("shiftsById")
+    .flatMap((shift) => (shift.expenses || []).map((expense) => ({
+      ...expense,
+      local: shift.local || "Local",
+      shiftId: shift.id,
+      date: expense.date || shift.openedAt,
+    })))
+    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+}
+
+function renderExpenseReport() {
+  const expenses = allExpenses();
+  const grouped = new Map();
+
+  expenses.forEach((expense) => {
+    const key = expenseDayKey(expense.date);
+    if (!grouped.has(key)) {
+      grouped.set(key, { date: expense.date, expenses: [] });
+    }
+    grouped.get(key).expenses.push(expense);
+  });
+
+  const days = [...grouped.values()];
+  $("reportTitle").textContent = "Gastos de caja";
+  $("reportDescription").textContent = "Movimientos cargados desde Turnos, separados por dia.";
+
+  $("reportSummary").innerHTML = `
+    <article>
+      <span>Total de gastos</span>
+      <strong>${money(totalOf(expenses, "amount"))}</strong>
+    </article>
+    <article>
+      <span>Movimientos</span>
+      <strong>${expenses.length}</strong>
+    </article>
+    <article>
+      <span>Dias con gastos</span>
+      <strong>${days.length}</strong>
+    </article>
+  `;
+
+  $("shiftReportList").innerHTML = days.length === 0
+    ? `<div class="empty-report"><strong>No hay gastos cargados.</strong><span>Los gastos apareceran aca cuando se agreguen desde Turnos.</span></div>`
+    : `<div class="expense-day-list">${days.map((day) => {
+        const subtotal = totalOf(day.expenses, "amount");
+        return `
+          <article class="expense-day">
+            <header class="expense-day-head">
+              <div>
+                <strong>${expenseDayLabel(day.date)}</strong>
+                <span>${day.expenses.length} ${day.expenses.length === 1 ? "movimiento" : "movimientos"}</span>
+              </div>
+              <strong>${money(subtotal)}</strong>
+            </header>
+            <div class="expense-rows">
+              ${day.expenses.map((expense) => `
+                <div class="expense-row">
+                  <time>${expenseTime(expense.date)}</time>
+                  <span class="expense-local">${escapeHtml(expense.local)}</span>
+                  <span class="expense-detail">${escapeHtml(expense.detail || "Sin detalle")}</span>
+                  <strong>${money(expense.amount)}</strong>
+                </div>
+              `).join("")}
+            </div>
+          </article>
+        `;
+      }).join("")}</div>`;
+}
+
 function renderReports() {
   const selectedStore = $("reportStoreSelect").value;
+  expandedShiftId = "";
+
+  if (selectedStore === EXPENSES_VIEW) {
+    renderExpenseReport();
+    return;
+  }
+
+  $("reportTitle").textContent = "Reporte de turnos";
+  $("reportDescription").textContent = "Consulta como cerro cada turno y revisa el detalle de sus ventas.";
+
   const rows = listByStore("shiftsById")
     .filter((shift) => shift.local === selectedStore)
     .sort((a, b) => new Date(b.openedAt) - new Date(a.openedAt))
