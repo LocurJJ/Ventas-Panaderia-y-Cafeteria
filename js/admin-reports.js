@@ -263,7 +263,6 @@ function renderExpenseReport() {
 
 function renderReports() {
   const selectedStore = $("reportStoreSelect").value;
-  expandedShiftId = "";
 
   if (selectedStore === EXPENSES_VIEW) {
     renderExpenseReport();
