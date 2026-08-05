@@ -864,24 +864,29 @@ function printClientAccount(client) {
   `);
   printWindow.document.close();
   printWindow.focus();
-  printWindow.addEventListener("afterprint", () => {
-    window.setTimeout(() => {
-      const shouldClear = confirm(
-        `¿La cuenta de ${client} se imprimio o guardo correctamente?\n\n` +
-        "Al aceptar se limpiaran solamente los movimientos incluidos en este archivo."
-      );
-      if (!shouldClear) return;
+  printWindow.print();
 
+  window.setTimeout(async () => {
+    const shouldClear = confirm(
+      `¿La cuenta de ${client} se imprimio o guardo correctamente?\n\n` +
+      "Al aceptar se limpiaran solamente los movimientos incluidos en este archivo."
+    );
+    if (!shouldClear) return;
+
+    try {
       const removedCount = clearPrintedClientAccounts(client, entries);
+      if (window.DB.flushWrites) await window.DB.flushWrites();
       renderClients();
       alert(
         removedCount > 0
           ? `Cuenta de ${client} limpiada. Ya se pueden cargar compras nuevas.`
           : `La cuenta de ${client} ya estaba limpia.`
       );
-    }, 0);
-  }, { once: true });
-  printWindow.print();
+    } catch (error) {
+      console.error(error);
+      alert("No se pudo limpiar la cuenta. Revisa Internet e intenta nuevamente.");
+    }
+  }, 100);
 }
 
 function addMovement(type) {
