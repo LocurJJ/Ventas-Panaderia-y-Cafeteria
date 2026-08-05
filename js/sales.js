@@ -139,6 +139,21 @@ function listClientAccounts(clientName) {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
+function clearPrintedClientAccounts(clientName, printedEntries) {
+  const records = readStore(CLIENT_ACCOUNT_STORE, {});
+  let removedCount = 0;
+
+  printedEntries.forEach((entry) => {
+    const storedEntry = records[entry.id];
+    if (!storedEntry || storedEntry.client !== clientName) return;
+    delete records[entry.id];
+    removedCount += 1;
+  });
+
+  if (removedCount > 0) writeStore(CLIENT_ACCOUNT_STORE, records);
+  return removedCount;
+}
+
 function currentProductPrice(productId, fallbackPrice) {
   const product = products.find((item) => item.id === productId);
   return Number(product?.salePrice ?? fallbackPrice ?? 0);
@@ -849,6 +864,23 @@ function printClientAccount(client) {
   `);
   printWindow.document.close();
   printWindow.focus();
+  printWindow.addEventListener("afterprint", () => {
+    window.setTimeout(() => {
+      const shouldClear = confirm(
+        `¿La cuenta de ${client} se imprimio o guardo correctamente?\n\n` +
+        "Al aceptar se limpiaran solamente los movimientos incluidos en este archivo."
+      );
+      if (!shouldClear) return;
+
+      const removedCount = clearPrintedClientAccounts(client, entries);
+      renderClients();
+      alert(
+        removedCount > 0
+          ? `Cuenta de ${client} limpiada. Ya se pueden cargar compras nuevas.`
+          : `La cuenta de ${client} ya estaba limpia.`
+      );
+    }, 0);
+  }, { once: true });
   printWindow.print();
 }
 
