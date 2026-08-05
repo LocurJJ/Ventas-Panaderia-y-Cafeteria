@@ -810,7 +810,7 @@ function renderClients() {
           <strong>${money(total)}</strong>
         </div>
         <div class="client-actions">
-          <button class="primary-button" type="button" data-print-client="${client}" ${entries.length === 0 ? "disabled" : ""}>Imprimir cuenta</button>
+          <button class="primary-button" type="button" data-print-client="${client}" ${entries.length === 0 ? "disabled" : ""}>Imprimir y limpiar cuenta</button>
         </div>
         <div class="account-list">${detail}</div>
       </article>
@@ -863,30 +863,18 @@ function printClientAccount(client) {
     </html>
   `);
   printWindow.document.close();
+
+  clearPrintedClientAccounts(client, entries);
+  renderClients();
+  if (window.DB.flushWrites) {
+    window.DB.flushWrites().catch((error) => {
+      console.error(error);
+      alert("No se pudo confirmar la limpieza de la cuenta. Revisa Internet.");
+    });
+  }
+
   printWindow.focus();
   printWindow.print();
-
-  window.setTimeout(async () => {
-    const shouldClear = confirm(
-      `¿La cuenta de ${client} se imprimio o guardo correctamente?\n\n` +
-      "Al aceptar se limpiaran solamente los movimientos incluidos en este archivo."
-    );
-    if (!shouldClear) return;
-
-    try {
-      const removedCount = clearPrintedClientAccounts(client, entries);
-      if (window.DB.flushWrites) await window.DB.flushWrites();
-      renderClients();
-      alert(
-        removedCount > 0
-          ? `Cuenta de ${client} limpiada. Ya se pueden cargar compras nuevas.`
-          : `La cuenta de ${client} ya estaba limpia.`
-      );
-    } catch (error) {
-      console.error(error);
-      alert("No se pudo limpiar la cuenta. Revisa Internet e intenta nuevamente.");
-    }
-  }, 100);
 }
 
 function addMovement(type) {
