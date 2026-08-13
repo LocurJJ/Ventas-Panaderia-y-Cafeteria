@@ -574,13 +574,17 @@
 
 .account-entry {
   display: grid;
-  grid-template-columns: 210px 1fr auto;
+  grid-template-columns: 210px minmax(0, 1fr) auto 34px;
   gap: 14px;
-  align-items: start;
+  align-items: center;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--bg);
+}
+
+.account-entry-delete {
+  justify-self: end;
 }
 
 .mini-products {
