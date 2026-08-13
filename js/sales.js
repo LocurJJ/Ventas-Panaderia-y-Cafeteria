@@ -154,6 +154,40 @@ function clearPrintedClientAccounts(clientName, printedEntries) {
   return removedCount;
 }
 
+async function deleteClientAccountEntry(entryId) {
+  const records = readStore(CLIENT_ACCOUNT_STORE, {});
+  const entry = records[entryId];
+
+  if (!entry || !isAccountClient(entry.client)) {
+    alert("Ese movimiento ya no esta pendiente.");
+    renderClients();
+    return;
+  }
+
+  const productsText = (entry.items || []).map(accountItemText).join(", ");
+  const confirmed = confirm(
+    `¿Borrar esta carga de ${entry.client}?\n\n` +
+    `${productsText}\nImporte: ${money(accountEntryTotal(entry))}\n\n` +
+    "Los productos volveran al stock."
+  );
+  if (!confirmed) return;
+
+  try {
+    delete records[entryId];
+    writeStore(CLIENT_ACCOUNT_STORE, records);
+    restoreSaleStock({ items: entry.items || [] });
+    if (window.DB.flushWrites) await window.DB.flushWrites();
+
+    renderClients();
+    renderProducts();
+    if (local === "Cafeteria") renderCafeProducts();
+    alert(`La carga de ${entry.client} fue borrada y el stock fue repuesto.`);
+  } catch (error) {
+    console.error(error);
+    alert("No se pudo confirmar el borrado. Revisa Internet e intenta nuevamente.");
+  }
+}
+
 function currentProductPrice(productId, fallbackPrice) {
   const product = products.find((item) => item.id === productId);
   return Number(product?.salePrice ?? fallbackPrice ?? 0);
@@ -797,6 +831,7 @@ function renderClients() {
           <strong>${new Date(entry.date).toLocaleString("es-AR")}</strong>
           <span>${(entry.items || []).map(accountItemText).join(", ")}</span>
           <b>${money(accountEntryTotal(entry))}</b>
+          <button class="delete-button account-entry-delete" type="button" data-delete-client-account="${entry.id}" aria-label="Borrar esta carga de ${client}" title="Borrar esta carga">X</button>
         </div>
       `).join("");
 
@@ -1066,6 +1101,12 @@ function setupEvents() {
     if (movementButton) {
       removeShiftMovement(local, movementButton.dataset.movementType, movementButton.dataset.movementId);
       renderShift();
+    }
+
+    const deleteClientAccountButton = event.target.closest("[data-delete-client-account]");
+    if (deleteClientAccountButton) {
+      deleteClientAccountEntry(deleteClientAccountButton.dataset.deleteClientAccount);
+      return;
     }
 
     const printClientButton = event.target.closest("[data-print-client]");
