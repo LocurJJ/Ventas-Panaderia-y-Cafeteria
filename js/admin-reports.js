@@ -2,6 +2,8 @@ const { listByStore, listSales } = window.DB;
 
 const DEFAULT_STORES = ["Central", "Cafeteria"];
 const EXPENSES_VIEW = "__expenses__";
+const STATISTICS_VIEW = "__statistics__";
+const GENERAL_STATISTICS = "__all__";
 const $ = (id) => document.getElementById(id);
 
 let expandedShiftId = "";
@@ -77,6 +79,7 @@ function fillStoreSelect() {
       `<option value="${escapeHtml(store)}">${escapeHtml(store)}</option>`
     )),
     `<option value="${EXPENSES_VIEW}">Gastos</option>`,
+    `<option value="${STATISTICS_VIEW}">Estadistica</option>`,
   ].join("");
   if ([...select.options].some((option) => option.value === previous)) {
     select.value = previous;
@@ -261,11 +264,179 @@ function renderExpenseReport() {
       }).join("")}</div>`;
 }
 
+function itemRevenue(item) {
+  const storedTotal = Number(item.total);
+  if (Number.isFinite(storedTotal)) return storedTotal;
+  return Number(item.quantity || 0) * Number(item.unitPrice || 0);
+}
+
+function statisticsData() {
+  const scope = $("statisticsStoreSelect").value;
+  const sales = listSales(scope === GENERAL_STATISTICS ? {} : { local: scope });
+  const products = new Map();
+
+  sales.forEach((sale) => {
+    (sale.items || []).forEach((item) => {
+      const name = String(item.name || "Producto sin nombre").trim() || "Producto sin nombre";
+      const key = item.productId || name.toLocaleLowerCase("es-AR");
+      const current = products.get(key) || {
+        productId: item.productId || "",
+        name,
+        weighable: !!item.weighable,
+        quantity: 0,
+        revenue: 0,
+        saleIds: new Set(),
+      };
+
+      current.quantity += Number(item.quantity || 0);
+      current.revenue += itemRevenue(item);
+      current.saleIds.add(sale.id);
+      products.set(key, current);
+    });
+  });
+
+  const ranking = [...products.values()]
+    .map((product) => ({
+      productId: product.productId,
+      name: product.name,
+      weighable: product.weighable,
+      quantity: product.quantity,
+      revenue: Math.round(product.revenue),
+      salesCount: product.saleIds.size,
+    }))
+    .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue || a.name.localeCompare(b.name))
+    .slice(0, 50)
+    .map((product, index) => ({ rank: index + 1, ...product }));
+
+  return {
+    scope,
+    sales,
+    ranking,
+    totalRevenue: totalOf(sales, "total"),
+    differentProducts: products.size,
+  };
+}
+
+function quantityText(product) {
+  const value = Number(product.quantity || 0).toLocaleString("es-AR", {
+    minimumFractionDigits: product.weighable ? 0 : 0,
+    maximumFractionDigits: product.weighable ? 3 : 0,
+  });
+  return product.weighable ? `${value} kg` : `${value} un.`;
+}
+
+function statisticsScopeLabel(scope) {
+  return scope === GENERAL_STATISTICS ? "General" : scope;
+}
+
+function renderStatisticsReport() {
+  const data = statisticsData();
+  const scopeLabel = statisticsScopeLabel(data.scope);
+
+  $("reportTitle").textContent = `Estadistica de productos - ${scopeLabel}`;
+  $("reportDescription").textContent = "Top 50 de productos ordenados por cantidad vendida.";
+  $("statisticsToolbar").hidden = false;
+
+  $("reportSummary").innerHTML = `
+    <article>
+      <span>Ventas analizadas</span>
+      <strong>${data.sales.length}</strong>
+    </article>
+    <article>
+      <span>Total vendido</span>
+      <strong>${money(data.totalRevenue)}</strong>
+    </article>
+    <article>
+      <span>Productos diferentes</span>
+      <strong>${data.differentProducts}</strong>
+    </article>
+  `;
+
+  $("shiftReportList").innerHTML = data.ranking.length === 0
+    ? `<div class="empty-report"><strong>No hay ventas para ${escapeHtml(scopeLabel)}.</strong><span>El ranking aparecera cuando existan ventas registradas.</span></div>`
+    : `
+      <div class="statistics-card">
+        <div class="statistics-heading">
+          <strong>Top 50 productos</strong>
+          <span>Ordenado por cantidad vendida</span>
+        </div>
+        <div class="statistics-table-wrap">
+          <table class="statistics-table">
+            <thead>
+              <tr>
+                <th scope="col">Puesto</th>
+                <th scope="col">Producto</th>
+                <th scope="col">Cantidad</th>
+                <th scope="col">Ventas</th>
+                <th scope="col">Facturado</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.ranking.map((product) => `
+                <tr>
+                  <td><span class="statistics-rank">${product.rank}</span></td>
+                  <td><strong>${escapeHtml(product.name)}</strong></td>
+                  <td>${quantityText(product)}</td>
+                  <td>${product.salesCount}</td>
+                  <td><strong>${money(product.revenue)}</strong></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+}
+
+function exportStatistics() {
+  const data = statisticsData();
+  const scopeLabel = statisticsScopeLabel(data.scope);
+  const payload = {
+    report: "Top de productos vendidos",
+    generatedAt: new Date().toISOString(),
+    scope: scopeLabel,
+    criteria: "Cantidad vendida",
+    limit: 50,
+    summary: {
+      salesAnalyzed: data.sales.length,
+      totalRevenue: data.totalRevenue,
+      differentProducts: data.differentProducts,
+    },
+    topProducts: data.ranking.map((product) => ({
+      rank: product.rank,
+      productId: product.productId || null,
+      name: product.name,
+      quantity: Number(product.quantity.toFixed(3)),
+      unit: product.weighable ? "kg" : "units",
+      salesCount: product.salesCount,
+      revenue: product.revenue,
+    })),
+  };
+  const safeScope = scopeLabel.toLocaleLowerCase("es-AR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `estadistica-productos-${safeScope}-${day}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function renderReports() {
   const selectedStore = $("reportStoreSelect").value;
 
+  $("statisticsToolbar").hidden = selectedStore !== STATISTICS_VIEW;
+
   if (selectedStore === EXPENSES_VIEW) {
     renderExpenseReport();
+    return;
+  }
+
+  if (selectedStore === STATISTICS_VIEW) {
+    renderStatisticsReport();
     return;
   }
 
@@ -311,6 +482,9 @@ $("reportStoreSelect").addEventListener("change", () => {
   renderReports();
 });
 
+$("statisticsStoreSelect").addEventListener("change", renderStatisticsReport);
+$("exportStatisticsButton").addEventListener("click", exportStatistics);
+
 $("shiftReportList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-shift-id]");
   if (!button) return;
@@ -327,3 +501,4 @@ window.addEventListener("panaderia:database-error", () => {
 });
 
 refreshReports();
+
