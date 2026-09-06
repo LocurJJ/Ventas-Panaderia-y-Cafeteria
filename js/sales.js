@@ -743,22 +743,18 @@ function renderShift() {
     $("reinforcementList").innerHTML = `<p class="muted">Abri caja para cargar refuerzos.</p>`;
     return;
   }
-  const sales = listSales({ local, shiftId: shift.id });
   const expenseTotal = (shift.expenses || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const reinforcementTotal = (shift.reinforcements || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const cashSales = sales.reduce((sum, sale) => sum + Number(sale.cash || 0) - Number(sale.change || 0), 0);
-  const digitalSales = sales.reduce((sum, sale) => sum + Number(sale.transfer || 0), 0);
-  const expectedCash = Number(shift.initialCash || 0) + cashSales + reinforcementTotal - expenseTotal;
 
   $("shiftSummary").innerHTML = `
     <h3>Resumen</h3>
     <div class="summary-row"><span>Abierto</span><strong>${new Date(shift.openedAt).toLocaleString("es-AR")}</strong></div>
     <div class="summary-row"><span>Efectivo inicial</span><strong>${money(shift.initialCash)}</strong></div>
     <div class="summary-row"><span>Gastos</span><strong>${money(expenseTotal)}</strong></div>
-    <div class="summary-row"><span>Ventas en efectivo</span><strong>${money(cashSales)}</strong></div>
-    <div class="summary-row"><span>Ventas digital</span><strong>${money(digitalSales)}</strong></div>
+    <div class="summary-row"><span>Ventas en efectivo</span><strong class="blind-amount" aria-label="Importe oculto">•••</strong></div>
+    <div class="summary-row"><span>Ventas digital</span><strong class="blind-amount" aria-label="Importe oculto">•••</strong></div>
     <div class="summary-row"><span>Refuerzos</span><strong>${money(reinforcementTotal)}</strong></div>
-    <div class="summary-row"><span>Efectivo teorico en caja</span><strong>${money(expectedCash)}</strong></div>
+    <div class="summary-row"><span>Efectivo teorico en caja</span><strong class="blind-amount" aria-label="Importe oculto">•••</strong></div>
     <button class="primary-button" data-close-shift style="background: var(--red); border-color: var(--red); width: 100%; margin-top: 14px;" type="button">Cerrar caja</button>
   `;
 
