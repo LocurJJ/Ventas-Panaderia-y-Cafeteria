@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ARCA - Panaderia Josue V2</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/arca.css?v=20260723-tables10-caja">
+  <link rel="stylesheet" href="css/arca.css?v=20260907-day-filter">
 </head>
 <body>
   <main class="page-shell arca-shell">
@@ -33,14 +33,21 @@
           <h2>Ventas del cuaderno</h2>
           <p class="muted">Selecciona una venta para preparar su Factura B.</p>
         </div>
-        <label>
-          Local
-          <select id="arcaStoreSelect">
-            <option value="Central">Central</option>
-            <option value="Sucursal">Sucursal</option>
-            <option value="Cafeteria">Cafeteria</option>
-          </select>
-        </label>
+        <div class="arca-sales-filters">
+          <label>
+            Fecha
+            <input id="arcaDateFilter" type="date">
+          </label>
+          <button class="secondary-button arca-today-button" id="arcaTodayButton" type="button">Hoy</button>
+          <label>
+            Local
+            <select id="arcaStoreSelect">
+              <option value="Central">Central</option>
+              <option value="Sucursal">Sucursal</option>
+              <option value="Cafeteria">Cafeteria</option>
+            </select>
+          </label>
+        </div>
       </div>
       <div class="sales-status-summary" id="salesStatusSummary"></div>
       <div class="arca-sales-list" id="arcaSalesList"></div>
@@ -144,7 +151,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/db.js?v=20260724-storage-fix"></script>
-  <script src="js/arca.js?v=20260723-tables10-caja"></script>
+  <script src="js/arca.js?v=20260907-day-filter"></script>
 </body>
 </html>
 

@@ -118,7 +118,11 @@ function refreshSales() {
 
 function selectedStoreSales() {
   const store = $("arcaStoreSelect").value;
-  return sales.filter((sale) => sale.local === store);
+  const selectedDate = $("arcaDateFilter").value;
+  return sales.filter((sale) => (
+    sale.local === store
+    && (!selectedDate || saleDayKey(sale.date) === selectedDate)
+  ));
 }
 
 function statusButton(sale) {
@@ -202,7 +206,7 @@ function renderSales() {
   const rows = selectedStoreSales();
   renderSalesSummary(rows);
   $("arcaSalesList").innerHTML = rows.length === 0
-    ? `<div class="arca-empty"><strong>No hay ventas en ${escapeHtml($("arcaStoreSelect").value)}.</strong><span>Las ventas guardadas en el cuaderno apareceran aca.</span></div>`
+    ? `<div class="arca-empty"><strong>No hay ventas en ${escapeHtml($("arcaStoreSelect").value)} para esta fecha.</strong><span>Elegí otro día para consultar las ventas anteriores.</span></div>`
     : renderSalesByDay(rows);
 }
 
@@ -230,8 +234,8 @@ function renderReports() {
 }
 
 function renderAll() {
-  renderSales();
-  renderReports();
+  if (activeArcaView === "reports") renderReports();
+  else renderSales();
 }
 
 function showView(view) {
@@ -242,6 +246,7 @@ function showView(view) {
     button.classList.toggle("active", button.dataset.arcaView === view);
   });
   if (view === "reports") renderReports();
+  else renderSales();
 }
 
 function currentSale() {
@@ -425,6 +430,11 @@ document.querySelectorAll("[data-arca-view]").forEach((button) => {
 });
 
 $("arcaStoreSelect").addEventListener("change", renderAll);
+$("arcaDateFilter").addEventListener("change", renderAll);
+$("arcaTodayButton").addEventListener("click", () => {
+  $("arcaDateFilter").value = saleDayKey(new Date());
+  renderAll();
+});
 $("invoiceStatusFilter").addEventListener("change", renderReports);
 $("invoiceVatRate").addEventListener("change", renderInvoiceTotals);
 
@@ -474,8 +484,9 @@ window.addEventListener("panaderia:database-error", () => {
   $("integrationBanner").innerHTML = "<strong>No se pudieron actualizar las ventas.</strong><span>Revisa la conexion a internet.</span>";
 });
 
+$("arcaDateFilter").value = saleDayKey(new Date());
+$("arcaDateFilter").max = saleDayKey(new Date());
 refreshSales();
-renderAll();
 showView(activeArcaView);
 checkArcaConnection();
 

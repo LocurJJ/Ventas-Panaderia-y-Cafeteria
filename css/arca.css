@@ -62,6 +62,18 @@
   width: 220px;
 }
 
+.arca-sales-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.arca-today-button {
+  min-height: 43px;
+}
+
 .sales-status-summary,
 .invoice-report-summary {
   display: grid;
@@ -413,6 +425,11 @@
   }
 
   .arca-toolbar label {
+    width: 100%;
+  }
+
+  .arca-sales-filters {
+    display: grid;
     width: 100%;
   }
 
