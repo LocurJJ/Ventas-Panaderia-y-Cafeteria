@@ -3,22 +3,63 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lista de compra - Panaderia Josue V2</title>
+  <title>Compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/purchases.css?v=20260912">
 </head>
-<body>
-  <main class="page-shell">
-    <header class="page-header">
+<body class="shopping-body">
+  <main class="shopping-shell">
+    <header class="shopping-header">
       <div>
-        <p class="eyebrow">Compras</p>
-        <h1>Lista de compra</h1>
+        <p class="eyebrow">Compras · Celular</p>
+        <h1>Compra</h1>
+        <p>Elegí un mayorista y confirmá lo que conseguís.</p>
       </div>
       <a class="secondary-button" href="index.html">Inicio</a>
     </header>
-    <section class="panel">
-      <h2>Proximo paso</h2>
-      <p>AcÃ¡ el comprador va a confirmar lo comprado y se sumara al stock.</p>
-    </section>
+
+    <section class="shopping-status" id="shoppingStatus"></section>
+
+    <div class="shopping-layout">
+      <section class="supplier-inbox">
+        <div class="inbox-title">
+          <h2>Mayoristas</h2>
+          <span id="pendingBadge" class="notification-badge">0</span>
+        </div>
+        <div class="supplier-chat-list" id="supplierChatList"></div>
+      </section>
+
+      <section class="supplier-detail panel" id="supplierDetail">
+        <div class="empty-purchase">
+          <strong>Elegí un mayorista</strong>
+          <span>Los productos pendientes aparecerán acá.</span>
+        </div>
+      </section>
+    </div>
   </main>
+
+  <dialog class="purchase-dialog" id="receiveDialog">
+    <form method="dialog" class="dialog-card" id="receiveForm">
+      <p class="eyebrow">Confirmar compra</p>
+      <h2 id="receiveProductName">Producto</h2>
+      <p class="muted" id="receiveProductInfo"></p>
+      <label>
+        ¿Cuántos packs llevás?
+        <input id="receivedPacksInput" type="number" min="0" step="1" inputmode="numeric" required>
+      </label>
+      <p class="stock-preview" id="stockPreview"></p>
+      <div class="dialog-actions">
+        <button class="secondary-button" id="cancelReceiveButton" type="button">Cancelar</button>
+        <button class="primary-button" type="submit">Confirmar y sumar stock</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script>window.PANADERIA_SYNC_STORES = ["productsById", "purchaseOrdersById"];</script>
+  <script src="js/db.js?v=20260912-purchases"></script>
+  <script src="js/shopping.js?v=20260912"></script>
 </body>
 </html>
