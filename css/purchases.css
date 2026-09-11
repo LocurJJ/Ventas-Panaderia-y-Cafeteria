@@ -65,6 +65,30 @@
   margin: 0;
 }
 
+.catalog-search {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.catalog-search input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.catalog-search input:focus {
+  border-color: var(--blue);
+  outline: 2px solid rgba(47, 107, 232, .22);
+}
+
 .catalog-tabs {
   display: flex;
   gap: 8px;
