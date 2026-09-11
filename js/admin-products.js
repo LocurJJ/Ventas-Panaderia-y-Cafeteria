@@ -42,7 +42,7 @@ function renderProducts() {
       <button type="button" class="${product.id === selectedId ? "active" : ""}" data-product-id="${product.id}">
         <strong>${product.name}</strong>
         <small>Venta: ${money(product.salePrice)} | Costo: ${money(product.cost)}</small>
-        <small>Stock: ${product.stock || 0} ${product.weighable ? "kg" : "un."} | ${product.supplier || "Otro"} | ${product.category || "Panaderia"}</small>
+        <small>Stock: ${product.stock || 0} ${product.weighable ? "kg" : "un."} | Pack: ${product.packQuantity || 1} | ${product.supplier || "Otro"} | ${product.category || "Panaderia"}</small>
         <small>Codigo: ${product.barcode || "Sin codigo"}</small>
       </button>
     `).join("");
@@ -59,6 +59,7 @@ function resetForm() {
   $("productForm").reset();
   $("productId").value = "";
   $("stockInput").value = "0";
+  $("packQuantityInput").value = "1";
   $("supplierInput").value = "Otro";
   $("categoryInput").value = "Panaderia";
   $("formTitle").textContent = "Anadir producto";
@@ -77,6 +78,7 @@ function selectProduct(id) {
   $("saleInput").value = product.salePrice || 0;
   $("barcodeInput").value = product.barcode || "";
   $("stockInput").value = product.stock || 0;
+  $("packQuantityInput").value = product.packQuantity || 1;
   $("supplierInput").value = product.supplier || "Otro";
   $("categoryInput").value = product.category || "Panaderia";
   $("weighableInput").checked = !!product.weighable;
@@ -96,6 +98,7 @@ function readForm() {
     salePrice,
     barcode: $("barcodeInput").value,
     stock: $("stockInput").value,
+    packQuantity: $("packQuantityInput").value,
     supplier: $("supplierInput").value,
     category: $("categoryInput").value,
     weighable: $("weighableInput").checked,
@@ -119,6 +122,7 @@ function productFromImport(rawProduct) {
     salePrice: importedSalePrice || calculateSalePrice(cost),
     barcode: String(rawProduct.barcode ?? rawProduct.codigoBarra ?? rawProduct.codigo ?? "").trim(),
     stock: Number(rawProduct.stock ?? 0),
+    packQuantity: Number(rawProduct.packQuantity ?? rawProduct.cantidadPorPack ?? 1),
     supplier: rawProduct.supplier ?? rawProduct.proveedor ?? "Otro",
     category: rawProduct.category ?? rawProduct.categoria ?? "Panaderia",
     weighable: !!(rawProduct.weighable ?? rawProduct.pesable ?? rawProduct.esPesable),
