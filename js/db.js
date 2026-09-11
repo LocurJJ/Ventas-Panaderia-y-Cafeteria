@@ -5,6 +5,7 @@ const STORE_DEFAULTS = {
   cafeTablesByLocal: {},
   clientAccountsById: {},
   productsById: {},
+  purchaseOrdersById: {},
   salesById: {},
   shiftsById: {},
   whatsappProducts: [],
@@ -297,6 +298,7 @@ function normalizeProduct(rawProduct) {
     stock: Number(rawProduct.stock || 0),
     supplier: rawProduct.supplier || "Otro",
     category: rawProduct.category || "Panaderia",
+    packQuantity: Math.max(0.001, Number(rawProduct.packQuantity || 1)),
     weighable: !!rawProduct.weighable,
   };
 }
@@ -317,7 +319,11 @@ function listProducts() {
 function initRemoteSync() {
   if (!remoteDb()) return;
 
-  Object.keys(STORE_DEFAULTS).forEach((name) => {
+  const requestedStores = Array.isArray(window.PANADERIA_SYNC_STORES)
+    ? window.PANADERIA_SYNC_STORES.filter((name) => STORE_DEFAULTS[name] !== undefined)
+    : Object.keys(STORE_DEFAULTS);
+
+  requestedStores.forEach((name) => {
     remoteRef(name).on("value", (snapshot) => {
       const value = snapshot.val();
       const localValue = readStore(name, fallbackFor(name));
