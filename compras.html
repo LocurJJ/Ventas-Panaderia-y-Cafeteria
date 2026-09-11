@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orden de compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/purchases.css?v=20260912">
+  <link rel="stylesheet" href="css/purchases.css?v=20260911-catalog">
 </head>
 <body>
   <main class="page-shell purchase-page">
@@ -26,15 +26,23 @@
     <section class="panel order-panel">
       <div class="order-toolbar">
         <div>
-          <h2>Pedido sugerido</h2>
-          <p class="muted">Se muestran hasta 20 productos vendidos en los últimos 7 días. Elaboración propia no se incluye.</p>
+          <h2 id="catalogTitle">Lo más importante</h2>
+          <p class="muted" id="catalogDescription">Hasta 20 productos de mayor venta y menor cobertura de stock. Elaboración propia no se incluye.</p>
         </div>
-        <button class="secondary-button" id="refreshSuggestionsButton" type="button">Actualizar sugerencia</button>
+        <div class="compact-actions">
+          <button class="secondary-button" id="saveCatalogButton" type="button">Guardar datos</button>
+          <button class="secondary-button" id="refreshSuggestionsButton" type="button">Actualizar</button>
+        </div>
       </div>
 
       <div class="purchase-notice">
         <strong>Cómo se calcula</strong>
         <span>La sugerencia cubre una semana de ventas entre Central, Sucursal y Cafetería, descontando el stock actual.</span>
+      </div>
+
+      <div class="catalog-tabs" role="tablist" aria-label="Productos para la orden">
+        <button class="catalog-tab active" id="importantTab" type="button" role="tab" aria-selected="true" data-catalog-view="important">Lo más importante <span id="importantCount">0</span></button>
+        <button class="catalog-tab" id="generalTab" type="button" role="tab" aria-selected="false" data-catalog-view="general">General <span id="generalCount">0</span></button>
       </div>
 
       <div class="order-table-wrap">
@@ -54,9 +62,19 @@
       </div>
 
       <div class="empty-purchase hidden" id="suggestionEmpty">
-        <strong>No hay suficientes ventas recientes para sugerir productos.</strong>
-        <span>Cuando haya ventas de los últimos 7 días aparecerán aquí.</span>
+        <strong>No hay productos para mostrar.</strong>
+        <span id="suggestionEmptyText">Cuando haya ventas de los últimos 7 días aparecerán aquí.</span>
       </div>
+
+      <nav class="catalog-pagination hidden" id="catalogPagination" aria-label="Páginas de productos">
+        <span>Página</span>
+        <input id="catalogPageInput" type="number" min="1" value="1" aria-label="Número de página">
+        <span>de <strong id="catalogTotalPages">1</strong> páginas</span>
+        <button class="pagination-button" id="previousCatalogPage" type="button" aria-label="Página anterior">‹</button>
+        <button class="pagination-button" id="nextCatalogPage" type="button" aria-label="Página siguiente">›</button>
+      </nav>
+
+      <div class="catalog-save-status" id="catalogSaveStatus">Stock, mayorista y packs sin cambios.</div>
 
       <div class="order-actions">
         <span class="muted" id="selectedProductsText">0 productos seleccionados</span>
@@ -80,6 +98,6 @@
   <script src="js/firebase-config.js"></script>
   <script>window.PANADERIA_SYNC_STORES = ["productsById", "salesById", "purchaseOrdersById"];</script>
   <script src="js/db.js?v=20260912-purchases"></script>
-  <script src="js/purchase-order.js?v=20260912"></script>
+  <script src="js/purchase-order.js?v=20260911-catalog"></script>
 </body>
 </html>
