@@ -5,8 +5,69 @@ const EXPENSES_VIEW = "__expenses__";
 const STATISTICS_VIEW = "__statistics__";
 const GENERAL_STATISTICS = "__all__";
 const $ = (id) => document.getElementById(id);
+const REPORT_TIME_ZONE = "America/Argentina/Buenos_Aires";
 
 let expandedShiftId = "";
+
+function dateKey(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleDateString("en-CA", { timeZone: REPORT_TIME_ZONE });
+}
+
+function monthRange(reference = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: REPORT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(reference);
+  const year = Number(parts.find((part) => part.type === "year").value);
+  const month = Number(parts.find((part) => part.type === "month").value);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    from: `${year}-${String(month).padStart(2, "0")}-01`,
+    to: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+function setDateRange(from, to) {
+  $("reportDateFrom").value = from;
+  $("reportDateTo").value = to;
+}
+
+function selectedDateRange() {
+  return {
+    from: $("reportDateFrom").value,
+    to: $("reportDateTo").value,
+  };
+}
+
+function isInSelectedRange(value) {
+  const key = dateKey(value);
+  const { from, to } = selectedDateRange();
+  return !!key && (!from || key >= from) && (!to || key <= to);
+}
+
+function moveMonth(offset) {
+  const current = $("reportDateFrom").value || monthRange().from;
+  const [year, month] = current.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + offset, 15, 12));
+  const range = monthRange(target);
+  setDateRange(range.from, range.to);
+  expandedShiftId = "";
+  renderReports();
+}
+
+function periodText() {
+  const { from, to } = selectedDateRange();
+  if (!from && !to) return "Todo el historial";
+  const format = (value) => {
+    if (!value) return "";
+    const [year, month, day] = value.split("-");
+    return `${day}/${month}/${year}`;
+  };
+  if (from && from === to) return format(from);
+  return `${from ? format(from) : "Inicio"} al ${to ? format(to) : "hoy"}`;
+}
 
 function money(value) {
   return `$ ${Number(value || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
@@ -36,8 +97,8 @@ function totalOf(items, field) {
   return (items || []).reduce((sum, item) => sum + Number(item[field] || 0), 0);
 }
 
-function shiftData(shift) {
-  const sales = listSales({ shiftId: shift.id });
+function shiftData(shift, providedSales = null) {
+  const sales = providedSales || listSales({ shiftId: shift.id });
   const sold = totalOf(sales, "total");
   const cash = sales.reduce((sum, sale) => (
     sum + Number(sale.cash || 0) - Number(sale.change || 0)
@@ -206,7 +267,7 @@ function allExpenses() {
 }
 
 function renderExpenseReport() {
-  const expenses = allExpenses();
+  const expenses = allExpenses().filter((expense) => isInSelectedRange(expense.date));
   const grouped = new Map();
 
   expenses.forEach((expense) => {
@@ -219,7 +280,7 @@ function renderExpenseReport() {
 
   const days = [...grouped.values()];
   $("reportTitle").textContent = "Gastos de caja";
-  $("reportDescription").textContent = "Movimientos cargados desde Turnos, separados por dia.";
+  $("reportDescription").textContent = `Movimientos cargados desde Turnos, separados por dia. Periodo: ${periodText()}.`;
 
   $("reportSummary").innerHTML = `
     <article>
@@ -272,10 +333,25 @@ function itemRevenue(item) {
 
 function statisticsData() {
   const scope = $("statisticsStoreSelect").value;
-  const sales = listSales(scope === GENERAL_STATISTICS ? {} : { local: scope });
+  const sales = listSales(scope === GENERAL_STATISTICS ? {} : { local: scope })
+    .filter((sale) => isInSelectedRange(sale.date));
   const products = new Map();
+  const daily = new Map();
 
   sales.forEach((sale) => {
+    const day = dateKey(sale.date);
+    if (!daily.has(day)) {
+      daily.set(day, {
+        date: day,
+        salesCount: 0,
+        totalRevenue: 0,
+        products: new Set(),
+      });
+    }
+    const dailyRow = daily.get(day);
+    dailyRow.salesCount += 1;
+    dailyRow.totalRevenue += Number(sale.total || 0);
+
     (sale.items || []).forEach((item) => {
       const name = String(item.name || "Producto sin nombre").trim() || "Producto sin nombre";
       const key = item.productId || name.toLocaleLowerCase("es-AR");
@@ -292,6 +368,7 @@ function statisticsData() {
       current.revenue += itemRevenue(item);
       current.saleIds.add(sale.id);
       products.set(key, current);
+      dailyRow.products.add(key);
     });
   });
 
@@ -308,10 +385,20 @@ function statisticsData() {
     .slice(0, 50)
     .map((product, index) => ({ rank: index + 1, ...product }));
 
+  const dailyBreakdown = [...daily.values()]
+    .map((row) => ({
+      date: row.date,
+      salesCount: row.salesCount,
+      totalRevenue: Math.round(row.totalRevenue),
+      differentProducts: row.products.size,
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
   return {
     scope,
     sales,
     ranking,
+    dailyBreakdown,
     totalRevenue: totalOf(sales, "total"),
     differentProducts: products.size,
   };
@@ -334,7 +421,7 @@ function renderStatisticsReport() {
   const scopeLabel = statisticsScopeLabel(data.scope);
 
   $("reportTitle").textContent = `Estadistica de productos - ${scopeLabel}`;
-  $("reportDescription").textContent = "Top 50 de productos ordenados por cantidad vendida.";
+  $("reportDescription").textContent = `Top 50 de productos y resumen por dia. Periodo: ${periodText()}.`;
   $("statisticsToolbar").hidden = false;
 
   $("reportSummary").innerHTML = `
@@ -385,6 +472,34 @@ function renderStatisticsReport() {
           </table>
         </div>
       </div>
+      <div class="statistics-card statistics-daily-card">
+        <div class="statistics-heading">
+          <strong>Resumen por dia</strong>
+          <span>${periodText()}</span>
+        </div>
+        <div class="statistics-table-wrap">
+          <table class="statistics-table statistics-daily-table">
+            <thead>
+              <tr>
+                <th scope="col">Dia</th>
+                <th scope="col">Ventas</th>
+                <th scope="col">Productos diferentes</th>
+                <th scope="col">Facturado</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.dailyBreakdown.map((day) => `
+                <tr>
+                  <td><strong>${escapeHtml(day.date.split("-").reverse().join("/"))}</strong></td>
+                  <td>${day.salesCount}</td>
+                  <td>${day.differentProducts}</td>
+                  <td><strong>${money(day.totalRevenue)}</strong></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
     `;
 }
 
@@ -395,6 +510,7 @@ function exportStatistics() {
     report: "Top de productos vendidos",
     generatedAt: new Date().toISOString(),
     scope: scopeLabel,
+    period: selectedDateRange(),
     criteria: "Cantidad vendida",
     limit: 50,
     summary: {
@@ -402,6 +518,7 @@ function exportStatistics() {
       totalRevenue: data.totalRevenue,
       differentProducts: data.differentProducts,
     },
+    dailyBreakdown: data.dailyBreakdown,
     topProducts: data.ranking.map((product) => ({
       rank: product.rank,
       productId: product.productId || null,
@@ -441,12 +558,19 @@ function renderReports() {
   }
 
   $("reportTitle").textContent = "Reporte de turnos";
-  $("reportDescription").textContent = "Consulta como cerro cada turno y revisa el detalle de sus ventas.";
+  $("reportDescription").textContent = `Consulta como cerro cada turno. Periodo: ${periodText()}.`;
+
+  const salesByShift = new Map();
+  listSales({ local: selectedStore }).forEach((sale) => {
+    if (!salesByShift.has(sale.shiftId)) salesByShift.set(sale.shiftId, []);
+    salesByShift.get(sale.shiftId).push(sale);
+  });
 
   const rows = listByStore("shiftsById")
     .filter((shift) => shift.local === selectedStore)
+    .filter((shift) => isInSelectedRange(shift.openedAt))
     .sort((a, b) => new Date(b.openedAt) - new Date(a.openedAt))
-    .map(shiftData);
+    .map((shift) => shiftData(shift, salesByShift.get(shift.id) || []));
 
   renderSummary(rows);
   $("shiftReportList").innerHTML = rows.length === 0
@@ -482,7 +606,23 @@ $("reportStoreSelect").addEventListener("change", () => {
   renderReports();
 });
 
-$("statisticsStoreSelect").addEventListener("change", renderStatisticsReport);
+$("statisticsStoreSelect").addEventListener("change", renderReports);
+
+["reportDateFrom", "reportDateTo"].forEach((id) => {
+  $(id).addEventListener("change", () => {
+    expandedShiftId = "";
+    renderReports();
+  });
+});
+
+$("previousMonthButton").addEventListener("click", () => moveMonth(-1));
+$("currentMonthButton").addEventListener("click", () => {
+  const range = monthRange();
+  setDateRange(range.from, range.to);
+  expandedShiftId = "";
+  renderReports();
+});
+$("nextMonthButton").addEventListener("click", () => moveMonth(1));
 $("exportStatisticsButton").addEventListener("click", exportStatistics);
 
 $("shiftReportList").addEventListener("click", (event) => {
@@ -500,5 +640,6 @@ window.addEventListener("panaderia:database-error", () => {
   $("shiftReportList").innerHTML = `<p class="error">No se pudieron actualizar los reportes. Revisa la conexion.</p>`;
 });
 
+const initialRange = monthRange();
+setDateRange(initialRange.from, initialRange.to);
 refreshReports();
-
