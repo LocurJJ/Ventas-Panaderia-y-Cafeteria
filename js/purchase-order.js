@@ -4,14 +4,23 @@ const {
   listProducts,
   listSales,
   saveProduct,
+  suppliers,
   upsertById,
 } = window.DB;
 
 const $ = (id) => document.getElementById(id);
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-let suggestedProducts = [];
+const PAGE_SIZE = 20;
+
+let importantProducts = [];
+let generalProducts = [];
+let recentSalesCount = 0;
+let catalogView = "important";
+let catalogPage = 1;
+let draftByProduct = new Map();
 let hasRemoteProducts = false;
 let hasRemoteSales = false;
+let isSavingCatalog = false;
 
 function escapeHtml(value) {
   return String(value == null ? "" : value)
@@ -46,8 +55,8 @@ function normalized(value) {
     .trim();
 }
 
-function isOwnProduction(product) {
-  return normalized(product.supplier).includes("elaboracion propia");
+function isOwnSupplier(value) {
+  return normalized(value).includes("elaboracion propia");
 }
 
 function activeOrders() {
@@ -62,7 +71,34 @@ function activeOrders() {
     });
 }
 
-function buildSuggestions() {
+function draftFor(productId) {
+  if (!draftByProduct.has(productId)) draftByProduct.set(productId, {});
+  return draftByProduct.get(productId);
+}
+
+function stateFor(row) {
+  const draft = draftByProduct.get(row.product.id) || {};
+  return {
+    packQuantity: Object.prototype.hasOwnProperty.call(draft, "packQuantity")
+      ? Number(draft.packQuantity)
+      : Math.max(0.001, Number(row.product.packQuantity || 1)),
+    supplier: Object.prototype.hasOwnProperty.call(draft, "supplier")
+      ? draft.supplier
+      : (row.product.supplier || "Otro"),
+    stock: Object.prototype.hasOwnProperty.call(draft, "stock")
+      ? Number(draft.stock)
+      : Number(row.product.stock || 0),
+    orderPacks: Math.max(0, Math.floor(Number(draft.orderPacks || 0))),
+  };
+}
+
+function suggestedPacks(row, state) {
+  if (isOwnSupplier(state.supplier)) return 0;
+  const missingUnits = Math.max(0, Number(row.weeklySales || 0) - Number(state.stock || 0));
+  return Math.ceil(missingUnits / Math.max(0.001, Number(state.packQuantity || 1)));
+}
+
+function buildCatalog() {
   const products = listProducts();
   const productsById = new Map(products.map(function (product) {
     return [product.id, product];
@@ -80,108 +116,238 @@ function buildSuggestions() {
   recentSales.forEach(function (sale) {
     (sale.items || []).forEach(function (item) {
       const product = productsById.get(item.productId) || productsByName.get(normalized(item.name));
-      if (!product || isOwnProduction(product)) return;
+      if (!product) return;
       weeklyByProduct.set(product.id, Number(weeklyByProduct.get(product.id) || 0) + Number(item.quantity || 0));
     });
   });
 
-  suggestedProducts = products
-    .filter(function (product) {
-      return !isOwnProduction(product) && Number(weeklyByProduct.get(product.id) || 0) > 0;
-    })
+  recentSalesCount = recentSales.length;
+  generalProducts = products
     .map(function (product) {
       const weeklySales = Number(weeklyByProduct.get(product.id) || 0);
       const stock = Number(product.stock || 0);
-      const packQuantity = Math.max(0.001, Number(product.packQuantity || 1));
-      const missingUnits = Math.max(0, weeklySales - stock);
       return {
         product: product,
         weeklySales: weeklySales,
-        stock: stock,
-        packQuantity: packQuantity,
-        suggestedPacks: Math.ceil(missingUnits / packQuantity),
-        urgency: missingUnits,
+        urgency: Math.max(0, weeklySales - stock),
       };
+    })
+    .sort(function (a, b) {
+      return a.product.name.localeCompare(b.product.name, "es-AR");
+    });
+
+  importantProducts = generalProducts
+    .filter(function (row) {
+      return !isOwnSupplier(row.product.supplier) && row.weeklySales > 0;
     })
     .sort(function (a, b) {
       return b.urgency - a.urgency
         || b.weeklySales - a.weeklySales
-        || a.stock - b.stock
-        || a.product.name.localeCompare(b.product.name);
+        || Number(a.product.stock || 0) - Number(b.product.stock || 0)
+        || a.product.name.localeCompare(b.product.name, "es-AR");
     })
     .slice(0, 20);
-
-  return {
-    products: products,
-    recentSales: recentSales,
-  };
 }
 
-function renderSummary(context) {
+function supplierOptions(selectedSupplier) {
+  const values = new Set(suppliers.concat(generalProducts.map(function (row) {
+    return row.product.supplier || "Otro";
+  })));
+  if (selectedSupplier) values.add(selectedSupplier);
+  return Array.from(values).map(function (supplier) {
+    return '<option value="' + escapeHtml(supplier) + '"' + (supplier === selectedSupplier ? " selected" : "") + '>' + escapeHtml(supplier) + '</option>';
+  }).join("");
+}
+
+function visibleRows() {
+  if (catalogView === "important") return importantProducts;
+  const start = (catalogPage - 1) * PAGE_SIZE;
+  return generalProducts.slice(start, start + PAGE_SIZE);
+}
+
+function totalPages() {
+  return Math.max(1, Math.ceil(generalProducts.length / PAGE_SIZE));
+}
+
+function renderSummary() {
   const orders = activeOrders();
   $("orderSummary").innerHTML =
-    '<article><span>Ventas analizadas</span><strong>' + context.recentSales.length + '</strong><small>Últimos 7 días · las 3 bocas</small></article>' +
-    '<article><span>Productos sugeridos</span><strong>' + suggestedProducts.length + '</strong><small>Máximo 20</small></article>' +
+    '<article><span>Ventas analizadas</span><strong>' + recentSalesCount + '</strong><small>Últimos 7 días · las 3 bocas</small></article>' +
+    '<article><span>Productos importantes</span><strong>' + importantProducts.length + '</strong><small>Máximo 20</small></article>' +
     '<article><span>Órdenes activas</span><strong>' + orders.length + '</strong><small>Pendientes en Compra</small></article>';
 }
 
-function renderSuggestions() {
-  const context = buildSuggestions();
-  renderSummary(context);
-  $("suggestionEmpty").classList.toggle("hidden", suggestedProducts.length > 0);
-  $("createOrderButton").disabled = suggestedProducts.length === 0;
+function rowHtml(row) {
+  const product = row.product;
+  const state = stateFor(row);
+  const unit = product.weighable ? "kg" : "un.";
+  const suggestion = suggestedPacks(row, state);
+  const ownProduction = isOwnSupplier(state.supplier);
+  const orderControl = ownProduction
+    ? '<span class="no-purchase">Elaboración propia</span>'
+    : '<label class="order-quantity"><span class="suggestion-hint">Sugerido: ' + suggestion + ' packs</span><input type="number" min="0" step="1" inputmode="numeric" value="' + (state.orderPacks || "") + '" placeholder="' + suggestion + '" data-field="orderPacks" aria-label="Packs de ' + escapeHtml(product.name) + '"></label>';
 
-  $("suggestionRows").innerHTML = suggestedProducts.map(function (row) {
-    const product = row.product;
-    const unit = product.weighable ? "kg" : "un.";
-    return '<tr data-product-id="' + escapeHtml(product.id) + '">' +
-      '<td><strong>' + escapeHtml(product.name) + '</strong></td>' +
-      '<td><label class="compact-field"><span class="sr-only">Cantidad por pack</span><input type="number" min="0.001" step="0.001" value="' + row.packQuantity + '" data-pack-size></label></td>' +
-      '<td><span class="supplier-name">' + escapeHtml(product.supplier || "Otro") + '</span></td>' +
-      '<td>' + numberText(row.weeklySales) + ' ' + unit + '</td>' +
-      '<td class="' + (row.stock < row.weeklySales ? "low-stock" : "") + '">' + numberText(row.stock) + ' ' + unit + '</td>' +
-      '<td><label class="order-quantity"><span>Sugerido: ' + row.suggestedPacks + ' packs</span><input type="number" min="0" step="1" inputmode="numeric" placeholder="' + row.suggestedPacks + '" data-order-packs aria-label="Packs de ' + escapeHtml(product.name) + '"></label></td>' +
-      '</tr>';
-  }).join("");
+  return '<tr data-product-id="' + escapeHtml(product.id) + '">' +
+    '<td><strong>' + escapeHtml(product.name) + '</strong></td>' +
+    '<td><label class="compact-field"><span class="sr-only">Cantidad por pack</span><input type="number" min="0.001" step="0.001" value="' + state.packQuantity + '" data-field="packQuantity"></label></td>' +
+    '<td><label class="compact-field"><span class="sr-only">Mayorista</span><select data-field="supplier">' + supplierOptions(state.supplier) + '</select></label></td>' +
+    '<td>' + numberText(row.weeklySales) + ' ' + unit + '</td>' +
+    '<td><label class="stock-field"><span class="sr-only">Stock actual</span><input class="' + (state.stock < row.weeklySales ? "low-stock-input" : "") + '" type="number" step="0.001" value="' + state.stock + '" data-field="stock"><small>' + unit + '</small></label></td>' +
+    '<td>' + orderControl + '</td>' +
+    '</tr>';
+}
 
+function renderPagination() {
+  const pagination = $("catalogPagination");
+  const pages = totalPages();
+  pagination.classList.toggle("hidden", catalogView !== "general");
+  $("catalogPageInput").max = pages;
+  $("catalogPageInput").value = catalogPage;
+  $("catalogTotalPages").textContent = pages;
+  $("previousCatalogPage").disabled = catalogPage <= 1;
+  $("nextCatalogPage").disabled = catalogPage >= pages;
+}
+
+function changedProductCount() {
+  return Array.from(draftByProduct.entries()).filter(function (entry) {
+    const product = generalProducts.find(function (row) { return row.product.id === entry[0]; });
+    if (!product) return false;
+    const draft = entry[1];
+    return (Object.prototype.hasOwnProperty.call(draft, "packQuantity") && Number(draft.packQuantity) !== Number(product.product.packQuantity || 1))
+      || (Object.prototype.hasOwnProperty.call(draft, "stock") && Number(draft.stock) !== Number(product.product.stock || 0))
+      || (Object.prototype.hasOwnProperty.call(draft, "supplier") && draft.supplier !== (product.product.supplier || "Otro"));
+  }).length;
+}
+
+function renderSaveStatus() {
+  const count = changedProductCount();
+  $("catalogSaveStatus").textContent = count === 0
+    ? "Stock, mayorista y packs sin cambios."
+    : count + (count === 1 ? " producto modificado sin guardar." : " productos modificados sin guardar.");
+  $("catalogSaveStatus").classList.toggle("has-changes", count > 0);
+  $("saveCatalogButton").disabled = count === 0;
+}
+
+function renderCatalog() {
+  buildCatalog();
+  catalogPage = Math.min(Math.max(1, catalogPage), totalPages());
+  const rows = visibleRows();
+
+  $("importantCount").textContent = importantProducts.length;
+  $("generalCount").textContent = generalProducts.length;
+  $("catalogTitle").textContent = catalogView === "important" ? "Lo más importante" : "General";
+  $("catalogDescription").textContent = catalogView === "important"
+    ? "Hasta 20 productos de mayor venta y menor cobertura de stock. Elaboración propia no se incluye."
+    : "Todos los productos, ordenados alfabéticamente y mostrados de 20 por página.";
+  $("importantTab").classList.toggle("active", catalogView === "important");
+  $("importantTab").setAttribute("aria-selected", catalogView === "important" ? "true" : "false");
+  $("generalTab").classList.toggle("active", catalogView === "general");
+  $("generalTab").setAttribute("aria-selected", catalogView === "general" ? "true" : "false");
+
+  $("suggestionRows").innerHTML = rows.map(rowHtml).join("");
+  $("suggestionEmpty").classList.toggle("hidden", rows.length > 0);
+  $("suggestionEmptyText").textContent = catalogView === "important"
+    ? "Cuando haya ventas de los últimos 7 días aparecerán aquí."
+    : "No hay productos cargados.";
+  $("createOrderButton").disabled = generalProducts.length === 0;
+  renderPagination();
+  renderSummary();
+  renderSaveStatus();
   updateSelectedCount();
 }
 
+function updateRowSuggestion(rowElement) {
+  const productId = rowElement.dataset.productId;
+  const row = generalProducts.find(function (item) { return item.product.id === productId; });
+  const hint = rowElement.querySelector(".suggestion-hint");
+  const orderInput = rowElement.querySelector('[data-field="orderPacks"]');
+  if (!row || !hint || !orderInput) return;
+  const suggestion = suggestedPacks(row, stateFor(row));
+  hint.textContent = "Sugerido: " + suggestion + " packs";
+  orderInput.placeholder = suggestion;
+}
+
 function updateSelectedCount() {
-  const count = Array.from(document.querySelectorAll("[data-order-packs]")).filter(function (input) {
-    return Number(input.value || 0) > 0;
+  const count = Array.from(draftByProduct.values()).filter(function (draft) {
+    return Number(draft.orderPacks || 0) > 0;
   }).length;
   $("selectedProductsText").textContent = count + (count === 1 ? " producto seleccionado" : " productos seleccionados");
 }
 
+function updateDraft(event) {
+  const field = event.target.dataset.field;
+  const rowElement = event.target.closest("[data-product-id]");
+  if (!field || !rowElement) return;
+  const draft = draftFor(rowElement.dataset.productId);
+
+  if (field === "supplier") draft.supplier = event.target.value;
+  if (field === "stock" || field === "packQuantity") draft[field] = Number(event.target.value || 0);
+  if (field === "orderPacks") draft.orderPacks = Math.max(0, Math.floor(Number(event.target.value || 0)));
+
+  if (field === "stock" || field === "packQuantity") updateRowSuggestion(rowElement);
+  renderSaveStatus();
+  updateSelectedCount();
+}
+
+function saveCatalogChanges(showMessage) {
+  const changed = [];
+  isSavingCatalog = true;
+
+  generalProducts.forEach(function (row) {
+    const product = row.product;
+    const state = stateFor(row);
+    const isChanged = Number(state.packQuantity) !== Number(product.packQuantity || 1)
+      || Number(state.stock) !== Number(product.stock || 0)
+      || state.supplier !== (product.supplier || "Otro");
+    if (!isChanged) return;
+
+    saveProduct(Object.assign({}, product, {
+      packQuantity: Math.max(0.001, Number(state.packQuantity || 1)),
+      supplier: state.supplier || "Otro",
+      stock: Number(state.stock || 0),
+    }));
+    changed.push(product.id);
+
+    const draft = draftFor(product.id);
+    delete draft.packQuantity;
+    delete draft.supplier;
+    delete draft.stock;
+  });
+
+  isSavingCatalog = false;
+  renderCatalog();
+  if (showMessage) {
+    alert(changed.length
+      ? "Se guardaron los datos de " + changed.length + (changed.length === 1 ? " producto." : " productos.")
+      : "No había cambios para guardar.");
+  }
+  return changed.length;
+}
+
 function createOrder() {
+  saveCatalogChanges(false);
+  buildCatalog();
   const items = [];
 
-  document.querySelectorAll("#suggestionRows tr").forEach(function (rowElement) {
-    const packs = Math.max(0, Math.floor(Number(rowElement.querySelector("[data-order-packs]").value || 0)));
+  draftByProduct.forEach(function (draft, productId) {
+    const packs = Math.max(0, Math.floor(Number(draft.orderPacks || 0)));
     if (!packs) return;
-    const suggestion = suggestedProducts.find(function (row) {
-      return row.product.id === rowElement.dataset.productId;
-    });
-    if (!suggestion) return;
-
-    const packQuantity = Math.max(0.001, Number(rowElement.querySelector("[data-pack-size]").value || 1));
-    const product = suggestion.product;
-    if (Number(product.packQuantity || 1) !== packQuantity) {
-      saveProduct(Object.assign({}, product, { packQuantity: packQuantity }));
-    }
+    const row = generalProducts.find(function (item) { return item.product.id === productId; });
+    if (!row) return;
+    const state = stateFor(row);
+    if (isOwnSupplier(state.supplier)) return;
 
     items.push({
       id: createId("purchase_item"),
-      productId: product.id,
-      name: product.name,
-      supplier: product.supplier || "Otro",
-      weighable: !!product.weighable,
-      packQuantity: packQuantity,
-      suggestedPacks: suggestion.suggestedPacks,
+      productId: row.product.id,
+      name: row.product.name,
+      supplier: state.supplier || "Otro",
+      weighable: !!row.product.weighable,
+      packQuantity: Math.max(0.001, Number(state.packQuantity || 1)),
+      suggestedPacks: suggestedPacks(row, state),
       orderedPacks: packs,
-      weeklySales: Number(suggestion.weeklySales.toFixed(3)),
-      stockAtCreation: Number(suggestion.stock),
+      weeklySales: Number(row.weeklySales.toFixed(3)),
+      stockAtCreation: Number(state.stock),
       receivedAt: null,
     });
   });
@@ -191,7 +357,7 @@ function createOrder() {
     return;
   }
 
-  const suppliers = new Set(items.map(function (item) { return item.supplier; }));
+  const supplierCount = new Set(items.map(function (item) { return item.supplier; })).size;
   const order = {
     id: createId("purchase_order"),
     createdAt: new Date().toISOString(),
@@ -199,10 +365,15 @@ function createOrder() {
     items: items,
   };
   upsertById("purchaseOrdersById", order);
-  document.querySelectorAll("[data-order-packs]").forEach(function (input) { input.value = ""; });
-  updateSelectedCount();
+
+  draftByProduct.forEach(function (draft, productId) {
+    delete draft.orderPacks;
+    if (!Object.keys(draft).length) draftByProduct.delete(productId);
+  });
+
+  renderCatalog();
   renderActiveOrders();
-  alert("Orden creada para " + suppliers.size + (suppliers.size === 1 ? " mayorista." : " mayoristas."));
+  alert("Orden creada para " + supplierCount + (supplierCount === 1 ? " mayorista." : " mayoristas."));
 }
 
 function renderActiveOrders() {
@@ -211,38 +382,56 @@ function renderActiveOrders() {
     ? '<div class="empty-purchase"><strong>No hay órdenes activas.</strong><span>Cuando crees una aparecerá acá y en el celular.</span></div>'
     : orders.map(function (order) {
         const pending = (order.items || []).filter(function (item) { return !item.receivedAt; });
-        const suppliers = new Set(pending.map(function (item) { return item.supplier || "Otro"; }));
+        const supplierCount = new Set(pending.map(function (item) { return item.supplier || "Otro"; })).size;
         return '<a class="active-order-card" href="lista-compra.html">' +
-          '<div><strong>Orden del ' + dateText(order.createdAt) + '</strong><span>' + suppliers.size + ' mayoristas · ' + pending.length + ' productos pendientes</span></div>' +
+          '<div><strong>Orden del ' + dateText(order.createdAt) + '</strong><span>' + supplierCount + ' mayoristas · ' + pending.length + ' productos pendientes</span></div>' +
           '<span class="order-arrow">›</span>' +
           '</a>';
       }).join("");
 }
 
-function refresh() {
-  renderSuggestions();
-  renderActiveOrders();
+function changePage(nextPage) {
+  catalogPage = Math.min(Math.max(1, nextPage), totalPages());
+  renderCatalog();
+  document.querySelector(".order-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-$("suggestionRows").addEventListener("input", function (event) {
-  if (event.target.matches("[data-order-packs]")) updateSelectedCount();
+$("suggestionRows").addEventListener("input", updateDraft);
+$("suggestionRows").addEventListener("change", updateDraft);
+
+document.querySelector(".catalog-tabs").addEventListener("click", function (event) {
+  const button = event.target.closest("[data-catalog-view]");
+  if (!button) return;
+  catalogView = button.dataset.catalogView;
+  catalogPage = 1;
+  renderCatalog();
 });
 
-$("refreshSuggestionsButton").addEventListener("click", renderSuggestions);
+$("catalogPageInput").addEventListener("change", function () {
+  changePage(Number(this.value || 1));
+});
+$("previousCatalogPage").addEventListener("click", function () { changePage(catalogPage - 1); });
+$("nextCatalogPage").addEventListener("click", function () { changePage(catalogPage + 1); });
+$("refreshSuggestionsButton").addEventListener("click", renderCatalog);
+$("saveCatalogButton").addEventListener("click", function () { saveCatalogChanges(true); });
 $("createOrderButton").addEventListener("click", createOrder);
 
 window.addEventListener("panaderia:store-changed", function (event) {
   const name = event.detail && event.detail.name;
   if (name === "productsById") hasRemoteProducts = true;
   if (name === "salesById") hasRemoteSales = true;
-  if (name === "purchaseOrdersById") renderActiveOrders();
-  if ((name === "productsById" || name === "salesById") && hasRemoteProducts && hasRemoteSales) {
-    renderSuggestions();
+  if (name === "purchaseOrdersById") {
+    renderActiveOrders();
+    renderSummary();
+  }
+  if (!isSavingCatalog && (name === "productsById" || name === "salesById") && hasRemoteProducts && hasRemoteSales) {
+    renderCatalog();
   }
 });
 
 window.addEventListener("panaderia:database-error", function () {
-  alert("No se pudo sincronizar la orden. Revisá la conexión a internet.");
+  alert("No se pudo guardar el cambio. Revisá la conexión a internet.");
 });
 
-refresh();
+renderCatalog();
+renderActiveOrders();
