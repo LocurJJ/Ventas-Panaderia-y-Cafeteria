@@ -3,22 +3,83 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Compra - Panaderia Josue V2</title>
+  <title>Orden de compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/purchases.css?v=20260912">
 </head>
 <body>
-  <main class="page-shell">
-    <header class="page-header">
+  <main class="page-shell purchase-page">
+    <header class="page-header purchase-header">
       <div>
-        <p class="eyebrow">Compras</p>
-        <h1>Compra</h1>
+        <p class="eyebrow">Compras · PC</p>
+        <h1>Orden de compra</h1>
+        <p class="muted">Productos con mayor venta semanal y menor cobertura de stock.</p>
       </div>
-      <a class="secondary-button" href="index.html">Inicio</a>
+      <nav class="top-actions">
+        <a class="secondary-button" href="lista-compra.html">Abrir Compra</a>
+        <a class="secondary-button" href="index.html">Inicio</a>
+      </nav>
     </header>
-    <section class="panel">
-      <h2>Proximo paso</h2>
-      <p>AcÃ¡ vamos a armar sugerencias por proveedor, stock minimo, packs y unidades.</p>
+
+    <section class="purchase-summary" id="orderSummary"></section>
+
+    <section class="panel order-panel">
+      <div class="order-toolbar">
+        <div>
+          <h2>Pedido sugerido</h2>
+          <p class="muted">Se muestran hasta 20 productos vendidos en los últimos 7 días. Elaboración propia no se incluye.</p>
+        </div>
+        <button class="secondary-button" id="refreshSuggestionsButton" type="button">Actualizar sugerencia</button>
+      </div>
+
+      <div class="purchase-notice">
+        <strong>Cómo se calcula</strong>
+        <span>La sugerencia cubre una semana de ventas entre Central, Sucursal y Cafetería, descontando el stock actual.</span>
+      </div>
+
+      <div class="order-table-wrap">
+        <table class="order-table">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Cantidad por pack</th>
+              <th>Mayorista</th>
+              <th>Venta semanal</th>
+              <th>Stock</th>
+              <th>Orden</th>
+            </tr>
+          </thead>
+          <tbody id="suggestionRows"></tbody>
+        </table>
+      </div>
+
+      <div class="empty-purchase hidden" id="suggestionEmpty">
+        <strong>No hay suficientes ventas recientes para sugerir productos.</strong>
+        <span>Cuando haya ventas de los últimos 7 días aparecerán aquí.</span>
+      </div>
+
+      <div class="order-actions">
+        <span class="muted" id="selectedProductsText">0 productos seleccionados</span>
+        <button class="primary-button" id="createOrderButton" type="button">Crear orden de compra</button>
+      </div>
+    </section>
+
+    <section class="panel active-orders-panel">
+      <div class="order-toolbar">
+        <div>
+          <h2>Órdenes activas</h2>
+          <p class="muted">Pedidos que todavía tienen productos pendientes de compra.</p>
+        </div>
+      </div>
+      <div class="active-order-list" id="activeOrderList"></div>
     </section>
   </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script>window.PANADERIA_SYNC_STORES = ["productsById", "salesById", "purchaseOrdersById"];</script>
+  <script src="js/db.js?v=20260912-purchases"></script>
+  <script src="js/purchase-order.js?v=20260912"></script>
 </body>
 </html>
