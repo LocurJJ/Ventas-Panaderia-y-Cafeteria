@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orden de compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/purchases.css?v=20260911-catalog">
+  <link rel="stylesheet" href="css/purchases.css?v=20260911-search">
 </head>
 <body>
   <main class="page-shell purchase-page">
@@ -13,7 +13,7 @@
       <div>
         <p class="eyebrow">Compras · PC</p>
         <h1>Orden de compra</h1>
-        <p class="muted">Productos con mayor venta semanal y menor cobertura de stock.</p>
+        <p class="muted">Los más vendidos, búsqueda general y sugerencias según el stock.</p>
       </div>
       <nav class="top-actions">
         <a class="secondary-button" href="lista-compra.html">Abrir Compra</a>
@@ -27,7 +27,7 @@
       <div class="order-toolbar">
         <div>
           <h2 id="catalogTitle">Lo más importante</h2>
-          <p class="muted" id="catalogDescription">Hasta 20 productos de mayor venta y menor cobertura de stock. Elaboración propia no se incluye.</p>
+          <p class="muted" id="catalogDescription">Los 25 productos más vendidos de todo el historial. Elaboración propia no se incluye.</p>
         </div>
         <div class="compact-actions">
           <button class="secondary-button" id="saveCatalogButton" type="button">Guardar datos</button>
@@ -39,6 +39,11 @@
         <strong>Cómo se calcula</strong>
         <span>La sugerencia cubre una semana de ventas entre Central, Sucursal y Cafetería, descontando el stock actual.</span>
       </div>
+
+      <label class="catalog-search">
+        <span>Buscar un producto para pedir</span>
+        <input id="catalogSearchInput" type="search" placeholder="Nombre, código o mayorista..." autocomplete="off">
+      </label>
 
       <div class="catalog-tabs" role="tablist" aria-label="Productos para la orden">
         <button class="catalog-tab active" id="importantTab" type="button" role="tab" aria-selected="true" data-catalog-view="important">Lo más importante <span id="importantCount">0</span></button>
@@ -98,6 +103,6 @@
   <script src="js/firebase-config.js"></script>
   <script>window.PANADERIA_SYNC_STORES = ["productsById", "salesById", "purchaseOrdersById"];</script>
   <script src="js/db.js?v=20260912-purchases"></script>
-  <script src="js/purchase-order.js?v=20260911-catalog"></script>
+  <script src="js/purchase-order.js?v=20260911-search"></script>
 </body>
 </html>
