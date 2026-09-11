@@ -78,17 +78,21 @@
 
           <div class="form-grid">
             <label>
-              Proveedor
+              Proveedor o mayorista
               <select id="supplierInput"></select>
             </label>
             <label>
-              Categoria
-              <select id="categoryInput">
-                <option value="Panaderia">Panaderia</option>
-                <option value="Cafeteria">Cafeteria</option>
-              </select>
+              Cantidad por pack
+              <input id="packQuantityInput" type="number" min="0.001" step="0.001" value="1" required>
             </label>
           </div>
+          <label>
+            Categoria
+            <select id="categoryInput">
+              <option value="Panaderia">Panaderia</option>
+              <option value="Cafeteria">Cafeteria</option>
+            </select>
+          </label>
           <label class="checkbox-box">
             <input id="weighableInput" type="checkbox">
             Producto pesable
@@ -120,7 +124,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
   <script src="js/firebase-config.js"></script>
-  <script src="js/db.js"></script>
-  <script src="js/admin-products.js"></script>
+  <script src="js/db.js?v=20260912-purchases"></script>
+  <script src="js/admin-products.js?v=20260912-purchases"></script>
 </body>
 </html>
