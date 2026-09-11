@@ -15,6 +15,8 @@ const PAGE_SIZE = 20;
 let importantProducts = [];
 let generalProducts = [];
 let recentSalesCount = 0;
+let allSalesCount = 0;
+let catalogSearch = "";
 let catalogView = "important";
 let catalogPage = 1;
 let draftByProduct = new Map();
@@ -106,30 +108,40 @@ function buildCatalog() {
   const productsByName = new Map(products.map(function (product) {
     return [normalized(product.name), product];
   }));
+  const allSales = listSales();
   const since = Date.now() - WEEK_MS;
-  const recentSales = listSales().filter(function (sale) {
-    const time = new Date(sale.date || 0).getTime();
-    return Number.isFinite(time) && time >= since;
-  });
   const weeklyByProduct = new Map();
+  const historicalByProduct = new Map();
 
-  recentSales.forEach(function (sale) {
+  allSales.forEach(function (sale) {
+    const saleTime = new Date(sale.date || 0).getTime();
+    const isRecent = Number.isFinite(saleTime) && saleTime >= since;
+
     (sale.items || []).forEach(function (item) {
       const product = productsById.get(item.productId) || productsByName.get(normalized(item.name));
       if (!product) return;
-      weeklyByProduct.set(product.id, Number(weeklyByProduct.get(product.id) || 0) + Number(item.quantity || 0));
+      const quantity = Number(item.quantity || 0);
+      historicalByProduct.set(product.id, Number(historicalByProduct.get(product.id) || 0) + quantity);
+      if (isRecent) {
+        weeklyByProduct.set(product.id, Number(weeklyByProduct.get(product.id) || 0) + quantity);
+      }
     });
   });
 
-  recentSalesCount = recentSales.length;
+  allSalesCount = allSales.length;
+  recentSalesCount = allSales.filter(function (sale) {
+    const time = new Date(sale.date || 0).getTime();
+    return Number.isFinite(time) && time >= since;
+  }).length;
+
   generalProducts = products
     .map(function (product) {
       const weeklySales = Number(weeklyByProduct.get(product.id) || 0);
-      const stock = Number(product.stock || 0);
+      const historicalSales = Number(historicalByProduct.get(product.id) || 0);
       return {
         product: product,
         weeklySales: weeklySales,
-        urgency: Math.max(0, weeklySales - stock),
+        historicalSales: historicalSales,
       };
     })
     .sort(function (a, b) {
@@ -138,15 +150,14 @@ function buildCatalog() {
 
   importantProducts = generalProducts
     .filter(function (row) {
-      return !isOwnSupplier(row.product.supplier) && row.weeklySales > 0;
+      return !isOwnSupplier(row.product.supplier) && row.historicalSales > 0;
     })
     .sort(function (a, b) {
-      return b.urgency - a.urgency
+      return b.historicalSales - a.historicalSales
         || b.weeklySales - a.weeklySales
-        || Number(a.product.stock || 0) - Number(b.product.stock || 0)
         || a.product.name.localeCompare(b.product.name, "es-AR");
     })
-    .slice(0, 20);
+    .slice(0, 25);
 }
 
 function supplierOptions(selectedSupplier) {
@@ -159,21 +170,31 @@ function supplierOptions(selectedSupplier) {
   }).join("");
 }
 
+function matchingGeneralProducts() {
+  if (!catalogSearch) return generalProducts;
+  return generalProducts.filter(function (row) {
+    const product = row.product;
+    const searchable = normalized((product.name || "") + " " + (product.barcode || "") + " " + (product.supplier || ""));
+    return searchable.includes(catalogSearch);
+  });
+}
+
 function visibleRows() {
   if (catalogView === "important") return importantProducts;
+  const matching = matchingGeneralProducts();
   const start = (catalogPage - 1) * PAGE_SIZE;
-  return generalProducts.slice(start, start + PAGE_SIZE);
+  return matching.slice(start, start + PAGE_SIZE);
 }
 
 function totalPages() {
-  return Math.max(1, Math.ceil(generalProducts.length / PAGE_SIZE));
+  return Math.max(1, Math.ceil(matchingGeneralProducts().length / PAGE_SIZE));
 }
 
 function renderSummary() {
   const orders = activeOrders();
   $("orderSummary").innerHTML =
-    '<article><span>Ventas analizadas</span><strong>' + recentSalesCount + '</strong><small>Últimos 7 días · las 3 bocas</small></article>' +
-    '<article><span>Productos importantes</span><strong>' + importantProducts.length + '</strong><small>Máximo 20</small></article>' +
+    '<article><span>Ventas históricas</span><strong>' + allSalesCount + '</strong><small>Central, Sucursal y Cafetería</small></article>' +
+    '<article><span>Productos importantes</span><strong>' + importantProducts.length + '</strong><small>Los 25 más vendidos</small></article>' +
     '<article><span>Órdenes activas</span><strong>' + orders.length + '</strong><small>Pendientes en Compra</small></article>';
 }
 
@@ -237,8 +258,10 @@ function renderCatalog() {
   $("generalCount").textContent = generalProducts.length;
   $("catalogTitle").textContent = catalogView === "important" ? "Lo más importante" : "General";
   $("catalogDescription").textContent = catalogView === "important"
-    ? "Hasta 20 productos de mayor venta y menor cobertura de stock. Elaboración propia no se incluye."
-    : "Todos los productos, ordenados alfabéticamente y mostrados de 20 por página.";
+    ? "Los 25 productos más vendidos de todo el historial. Elaboración propia no se incluye."
+    : (catalogSearch
+      ? "Resultados para “" + $("catalogSearchInput").value.trim() + "”, mostrados de 20 por página."
+      : "Todos los productos, ordenados alfabéticamente y mostrados de 20 por página.");
   $("importantTab").classList.toggle("active", catalogView === "important");
   $("importantTab").setAttribute("aria-selected", catalogView === "important" ? "true" : "false");
   $("generalTab").classList.toggle("active", catalogView === "general");
@@ -247,8 +270,8 @@ function renderCatalog() {
   $("suggestionRows").innerHTML = rows.map(rowHtml).join("");
   $("suggestionEmpty").classList.toggle("hidden", rows.length > 0);
   $("suggestionEmptyText").textContent = catalogView === "important"
-    ? "Cuando haya ventas de los últimos 7 días aparecerán aquí."
-    : "No hay productos cargados.";
+    ? "Cuando haya ventas registradas aparecerán aquí."
+    : (catalogSearch ? "Probá con otro nombre, código o mayorista." : "No hay productos cargados.");
   $("createOrderButton").disabled = generalProducts.length === 0;
   renderPagination();
   renderSummary();
@@ -403,6 +426,15 @@ document.querySelector(".catalog-tabs").addEventListener("click", function (even
   const button = event.target.closest("[data-catalog-view]");
   if (!button) return;
   catalogView = button.dataset.catalogView;
+  catalogSearch = "";
+  $("catalogSearchInput").value = "";
+  catalogPage = 1;
+  renderCatalog();
+});
+
+$("catalogSearchInput").addEventListener("input", function () {
+  catalogSearch = normalized(this.value);
+  if (catalogSearch) catalogView = "general";
   catalogPage = 1;
   renderCatalog();
 });
