@@ -354,6 +354,68 @@
   font-weight: 800;
 }
 
+.date-filter-toolbar {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid #36527a;
+  border-radius: 8px;
+  background: #152238;
+}
+
+.date-filter-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.date-filter-copy span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.date-filter-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.date-filter-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.date-filter-controls input {
+  min-height: 43px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  color-scheme: dark;
+  font: inherit;
+}
+
+.date-filter-controls input:focus {
+  border-color: var(--blue);
+  outline: 2px solid rgba(47, 107, 232, .25);
+}
+
+.month-button {
+  min-height: 43px;
+  white-space: nowrap;
+}
+
+.statistics-daily-card {
+  margin-top: 14px;
+}
+
 @media (max-width: 760px) {
   .reports-toolbar,
   .shift-report-head {
@@ -371,6 +433,16 @@
 
   .statistics-filter,
   .statistics-export {
+    width: 100%;
+  }
+
+  .date-filter-copy,
+  .date-filter-controls {
+    display: grid;
+  }
+
+  .date-filter-controls label,
+  .month-button {
     width: 100%;
   }
 
