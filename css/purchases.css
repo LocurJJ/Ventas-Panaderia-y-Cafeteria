@@ -138,7 +138,7 @@
 }
 
 .order-quantity span {
-  color: #9db8e9;
+  color: var(--muted);
   font-size: .78rem;
 }
 
