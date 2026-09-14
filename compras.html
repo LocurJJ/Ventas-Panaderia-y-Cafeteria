@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orden de compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/purchases.css?v=20260911-search">
+  <link rel="stylesheet" href="css/purchases.css?v=20260914-row-order">
 </head>
 <body>
   <main class="page-shell purchase-page">
@@ -81,10 +81,7 @@
 
       <div class="catalog-save-status" id="catalogSaveStatus">Stock, mayorista y packs sin cambios.</div>
 
-      <div class="order-actions">
-        <span class="muted" id="selectedProductsText">0 productos seleccionados</span>
-        <button class="primary-button" id="createOrderButton" type="button">Crear orden de compra</button>
-      </div>
+      <p class="row-order-help">Usá el botón <strong>Ordenar</strong> de cada producto. Los productos en naranja ya están pendientes de compra.</p>
     </section>
 
     <section class="panel active-orders-panel">
@@ -103,6 +100,6 @@
   <script src="js/firebase-config.js"></script>
   <script>window.PANADERIA_SYNC_STORES = ["productsById", "salesById", "purchaseOrdersById"];</script>
   <script src="js/db.js?v=20260912-purchases"></script>
-  <script src="js/purchase-order.js?v=20260911-search"></script>
+  <script src="js/purchase-order.js?v=20260914-row-order"></script>
 </body>
 </html>
