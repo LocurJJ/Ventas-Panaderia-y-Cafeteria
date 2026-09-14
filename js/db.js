@@ -17,19 +17,24 @@ const pendingWrites = new Set();
 const REMOTE_ONLY_STORES = new Set(["salesById"]);
 
 const suppliers = [
-  "Oscar",
+  "Banylac",
   "Baqueano",
-  "de Quesos (Leo)",
-  "Grupo MAX",
-  "Maxi Consumo",
+  "Cafeteria Esmeralda",
+  "Chipá",
+  "Coca-Cola",
+  "cookies",
+  "Costo Zero",
+  "De quesos (Leo)",
   "Don angel",
   "Golosinas",
-  "Serenisima",
+  "Grupo max",
+  "Oscar",
+  "Otros",
+  "Pan de miga",
   "Pastas",
+  "Serenisima",
   "Tapas",
-  "Coca Cola",
   "Elaboracion propia",
-  "Otro",
 ];
 
 function createId(prefix) {
