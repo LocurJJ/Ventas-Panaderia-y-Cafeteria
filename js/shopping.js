@@ -31,6 +31,40 @@ function numberText(value) {
   return Number(value || 0).toLocaleString("es-AR", { maximumFractionDigits: 3 });
 }
 
+function normalizedSupplier(value) {
+  return String(value || "")
+    .toLocaleLowerCase("es-AR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function canonicalSupplier(value) {
+  const aliases = {
+    "banylac": "Banylac",
+    "baqueano": "Baqueano",
+    "cafeteria esmeralda": "Cafeteria Esmeralda",
+    "chipa": "Chipá",
+    "coca cola": "Coca-Cola",
+    "coca-cola": "Coca-Cola",
+    "cookies": "cookies",
+    "costo zero": "Costo Zero",
+    "de quesos (leo)": "De quesos (Leo)",
+    "don angel": "Don angel",
+    "golosinas": "Golosinas",
+    "grupo max": "Grupo max",
+    "oscar": "Oscar",
+    "otro": "Otros",
+    "otros": "Otros",
+    "pan de miga": "Pan de miga",
+    "pastas": "Pastas",
+    "serenisima": "Serenisima",
+    "tapas": "Tapas",
+    "elaboracion propia": "Elaboracion propia",
+  };
+  return aliases[normalizedSupplier(value)] || String(value || "Otros").trim();
+}
+
 function activeOrders() {
   return listByStore("purchaseOrdersById")
     .filter(function (order) {
@@ -44,35 +78,44 @@ function activeOrders() {
 }
 
 function supplierGroups() {
-  const groups = [];
+  const grouped = new Map();
 
   activeOrders().forEach(function (order) {
-    const bySupplier = new Map();
     (order.items || []).forEach(function (item) {
-      const supplier = item.supplier || "Otro";
-      if (!bySupplier.has(supplier)) bySupplier.set(supplier, []);
-      bySupplier.get(supplier).push(item);
-    });
-
-    bySupplier.forEach(function (items, supplier) {
-      const pendingItems = items.filter(function (item) { return !item.receivedAt; });
-      if (!pendingItems.length) return;
-      groups.push({
-        key: order.id + "::" + supplier,
-        order: order,
-        supplier: supplier,
-        items: items,
-        pendingItems: pendingItems,
-      });
+      const supplier = canonicalSupplier(item.supplier);
+      const key = normalizedSupplier(supplier);
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key: key,
+          supplier: supplier,
+          entries: [],
+        });
+      }
+      grouped.get(key).entries.push({ order: order, item: item });
     });
   });
 
-  return groups;
+  return Array.from(grouped.values())
+    .map(function (group) {
+      group.pendingEntries = group.entries.filter(function (entry) {
+        return !entry.item.receivedAt;
+      });
+      group.orderCount = new Set(group.entries.map(function (entry) {
+        return entry.order.id;
+      })).size;
+      return group;
+    })
+    .filter(function (group) {
+      return group.pendingEntries.length > 0;
+    })
+    .sort(function (a, b) {
+      return a.supplier.localeCompare(b.supplier, "es-AR");
+    });
 }
 
 function renderStatus(groups) {
   const pendingProducts = groups.reduce(function (sum, group) {
-    return sum + group.pendingItems.length;
+    return sum + group.pendingEntries.length;
   }, 0);
   const suppliers = new Set(groups.map(function (group) { return group.supplier; }));
 
@@ -87,10 +130,11 @@ function renderInbox(groups) {
     ? '<div class="empty-purchase compact-empty"><strong>Todo comprado</strong><span>No hay productos pendientes.</span></div>'
     : groups.map(function (group) {
         const active = group.key === selectedGroupKey ? " active" : "";
+        const orderText = group.orderCount === 1 ? "1 orden activa" : group.orderCount + " órdenes reunidas";
         return '<button class="supplier-chat' + active + '" type="button" data-group-key="' + escapeHtml(group.key) + '">' +
           '<span class="supplier-avatar">' + escapeHtml(group.supplier.charAt(0).toUpperCase()) + '</span>' +
-          '<span class="supplier-chat-copy"><strong>' + escapeHtml(group.supplier) + '</strong><small>Orden ' + dateText(group.order.createdAt) + '</small><span>' + group.pendingItems.length + (group.pendingItems.length === 1 ? " producto pendiente" : " productos pendientes") + '</span></span>' +
-          '<span class="notification-badge">' + group.pendingItems.length + '</span>' +
+          '<span class="supplier-chat-copy"><strong>' + escapeHtml(group.supplier) + '</strong><small>' + orderText + '</small><span>' + group.pendingEntries.length + (group.pendingEntries.length === 1 ? " producto pendiente" : " productos pendientes") + '</span></span>' +
+          '<span class="notification-badge">' + group.pendingEntries.length + '</span>' +
           '</button>';
       }).join("");
 }
@@ -107,16 +151,18 @@ function renderDetail(groups) {
     return;
   }
 
+  const orderText = selected.orderCount === 1 ? "1 orden activa" : selected.orderCount + " órdenes reunidas";
   $("supplierDetail").innerHTML =
-    '<header class="supplier-detail-head"><div><p class="eyebrow">Mayorista</p><h2>' + escapeHtml(selected.supplier) + '</h2><span>Orden del ' + dateText(selected.order.createdAt) + '</span></div><span class="notification-badge">' + selected.pendingItems.length + '</span></header>' +
+    '<header class="supplier-detail-head"><div><p class="eyebrow">Mayorista</p><h2>' + escapeHtml(selected.supplier) + '</h2><span>' + orderText + '</span></div><span class="notification-badge">' + selected.pendingEntries.length + '</span></header>' +
     '<div class="shopping-item-list">' +
-      selected.items.map(function (item) {
+      selected.entries.map(function (entry) {
+        const item = entry.item;
         const received = !!item.receivedAt;
         const unit = item.weighable ? "kg" : "un.";
         const detail = received
           ? 'Comprado: ' + numberText(item.receivedPacks) + ' packs · +' + numberText(item.receivedUnits) + ' ' + unit + ' al stock'
           : 'Pedido: ' + numberText(item.orderedPacks) + ' packs · ' + numberText(item.packQuantity) + ' ' + unit + ' por pack';
-        return '<button class="shopping-item' + (received ? " received" : "") + '" type="button" data-order-id="' + escapeHtml(selected.order.id) + '" data-item-id="' + escapeHtml(item.id) + '"' + (received ? " disabled" : "") + '>' +
+        return '<button class="shopping-item' + (received ? " received" : "") + '" type="button" data-order-id="' + escapeHtml(entry.order.id) + '" data-item-id="' + escapeHtml(item.id) + '"' + (received ? " disabled" : "") + '>' +
           '<span class="item-check">' + (received ? "✓" : "") + '</span>' +
           '<span class="shopping-item-copy"><strong>' + escapeHtml(item.name) + '</strong><span>' + detail + '</span>' +
           (received ? '<small>Confirmado ' + dateText(item.receivedAt) + '</small>' : '<small>Tocá para confirmar la cantidad conseguida</small>') +
