@@ -14,6 +14,36 @@ let changedProducts = window.DB.readStore(WHATSAPP_KEY, []);
 
 const $ = (id) => document.getElementById(id);
 
+function normalizedSupplier(value) {
+  return String(value || "").toLocaleLowerCase("es-AR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+function canonicalSupplier(value) {
+  const aliases = {
+    "banylac": "Banylac",
+    "baqueano": "Baqueano",
+    "cafeteria esmeralda": "Cafeteria Esmeralda",
+    "chipa": "Chipá",
+    "coca cola": "Coca-Cola",
+    "coca-cola": "Coca-Cola",
+    "cookies": "cookies",
+    "costo zero": "Costo Zero",
+    "de quesos (leo)": "De quesos (Leo)",
+    "don angel": "Don angel",
+    "golosinas": "Golosinas",
+    "grupo max": "Grupo max",
+    "oscar": "Oscar",
+    "otro": "Otros",
+    "otros": "Otros",
+    "pan de miga": "Pan de miga",
+    "pastas": "Pastas",
+    "serenisima": "Serenisima",
+    "tapas": "Tapas",
+    "elaboracion propia": "Elaboracion propia",
+  };
+  return aliases[normalizedSupplier(value)] || String(value || "Otros").trim();
+}
+
 function money(value) {
   return `$ ${Number(value || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
 }
@@ -42,7 +72,7 @@ function renderProducts() {
       <button type="button" class="${product.id === selectedId ? "active" : ""}" data-product-id="${product.id}">
         <strong>${product.name}</strong>
         <small>Venta: ${money(product.salePrice)} | Costo: ${money(product.cost)}</small>
-        <small>Stock: ${product.stock || 0} ${product.weighable ? "kg" : "un."} | Pack: ${product.packQuantity || 1} | ${product.supplier || "Otro"} | ${product.category || "Panaderia"}</small>
+        <small>Stock: ${product.stock || 0} ${product.weighable ? "kg" : "un."} | Pack: ${product.packQuantity || 1} | ${canonicalSupplier(product.supplier)} | ${product.category || "Panaderia"}</small>
         <small>Codigo: ${product.barcode || "Sin codigo"}</small>
       </button>
     `).join("");
@@ -60,7 +90,7 @@ function resetForm() {
   $("productId").value = "";
   $("stockInput").value = "0";
   $("packQuantityInput").value = "1";
-  $("supplierInput").value = "Otro";
+  $("supplierInput").value = "Otros";
   $("categoryInput").value = "Panaderia";
   $("formTitle").textContent = "Anadir producto";
   $("deleteProductButton").classList.add("hidden");
@@ -79,7 +109,7 @@ function selectProduct(id) {
   $("barcodeInput").value = product.barcode || "";
   $("stockInput").value = product.stock || 0;
   $("packQuantityInput").value = product.packQuantity || 1;
-  $("supplierInput").value = product.supplier || "Otro";
+  $("supplierInput").value = canonicalSupplier(product.supplier);
   $("categoryInput").value = product.category || "Panaderia";
   $("weighableInput").checked = !!product.weighable;
   $("formTitle").textContent = "Modificar producto";
@@ -123,7 +153,7 @@ function productFromImport(rawProduct) {
     barcode: String(rawProduct.barcode ?? rawProduct.codigoBarra ?? rawProduct.codigo ?? "").trim(),
     stock: Number(rawProduct.stock ?? 0),
     packQuantity: Number(rawProduct.packQuantity ?? rawProduct.cantidadPorPack ?? 1),
-    supplier: rawProduct.supplier ?? rawProduct.proveedor ?? "Otro",
+    supplier: canonicalSupplier(rawProduct.supplier ?? rawProduct.proveedor ?? "Otros"),
     category: rawProduct.category ?? rawProduct.categoria ?? "Panaderia",
     weighable: !!(rawProduct.weighable ?? rawProduct.pesable ?? rawProduct.esPesable),
   };
