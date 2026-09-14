@@ -58,8 +58,34 @@ function normalized(value) {
     .trim();
 }
 
+function canonicalSupplier(value) {
+  const aliases = {
+    "banylac": "Banylac",
+    "baqueano": "Baqueano",
+    "cafeteria esmeralda": "Cafeteria Esmeralda",
+    "chipa": "Chipá",
+    "coca cola": "Coca-Cola",
+    "coca-cola": "Coca-Cola",
+    "cookies": "cookies",
+    "costo zero": "Costo Zero",
+    "de quesos (leo)": "De quesos (Leo)",
+    "don angel": "Don angel",
+    "golosinas": "Golosinas",
+    "grupo max": "Grupo max",
+    "oscar": "Oscar",
+    "otro": "Otros",
+    "otros": "Otros",
+    "pan de miga": "Pan de miga",
+    "pastas": "Pastas",
+    "serenisima": "Serenisima",
+    "tapas": "Tapas",
+    "elaboracion propia": "Elaboracion propia",
+  };
+  return aliases[normalized(value)] || String(value || "Otros").trim();
+}
+
 function isOwnSupplier(value) {
-  return normalized(value).includes("elaboracion propia");
+  return canonicalSupplier(value) === "Elaboracion propia";
 }
 
 function activeOrders() {
@@ -97,8 +123,8 @@ function stateFor(row) {
       ? Number(draft.packQuantity)
       : Math.max(0.001, Number(row.product.packQuantity || 1)),
     supplier: Object.prototype.hasOwnProperty.call(draft, "supplier")
-      ? draft.supplier
-      : (row.product.supplier || "Otro"),
+      ? canonicalSupplier(draft.supplier)
+      : canonicalSupplier(row.product.supplier),
     stock: Object.prototype.hasOwnProperty.call(draft, "stock")
       ? Number(draft.stock)
       : Number(row.product.stock || 0),
@@ -173,12 +199,14 @@ function buildCatalog() {
 }
 
 function supplierOptions(selectedSupplier) {
-  const values = new Set(suppliers.concat(generalProducts.map(function (row) {
-    return row.product.supplier || "Otro";
-  })));
-  if (selectedSupplier) values.add(selectedSupplier);
+  const selected = canonicalSupplier(selectedSupplier);
+  const values = new Set(suppliers.map(canonicalSupplier));
+  generalProducts.forEach(function (row) {
+    values.add(canonicalSupplier(row.product.supplier));
+  });
+  values.add(selected);
   return Array.from(values).map(function (supplier) {
-    return '<option value="' + escapeHtml(supplier) + '"' + (supplier === selectedSupplier ? " selected" : "") + '>' + escapeHtml(supplier) + '</option>';
+    return '<option value="' + escapeHtml(supplier) + '"' + (supplier === selected ? " selected" : "") + '>' + escapeHtml(supplier) + '</option>';
   }).join("");
 }
 
@@ -256,12 +284,12 @@ function renderPagination() {
 
 function changedProductCount() {
   return Array.from(draftByProduct.entries()).filter(function (entry) {
-    const product = generalProducts.find(function (row) { return row.product.id === entry[0]; });
-    if (!product) return false;
+    const row = generalProducts.find(function (item) { return item.product.id === entry[0]; });
+    if (!row) return false;
     const draft = entry[1];
-    return (Object.prototype.hasOwnProperty.call(draft, "packQuantity") && Number(draft.packQuantity) !== Number(product.product.packQuantity || 1))
-      || (Object.prototype.hasOwnProperty.call(draft, "stock") && Number(draft.stock) !== Number(product.product.stock || 0))
-      || (Object.prototype.hasOwnProperty.call(draft, "supplier") && draft.supplier !== (product.product.supplier || "Otro"));
+    return (Object.prototype.hasOwnProperty.call(draft, "packQuantity") && Number(draft.packQuantity) !== Number(row.product.packQuantity || 1))
+      || (Object.prototype.hasOwnProperty.call(draft, "stock") && Number(draft.stock) !== Number(row.product.stock || 0))
+      || (Object.prototype.hasOwnProperty.call(draft, "supplier") && canonicalSupplier(draft.supplier) !== canonicalSupplier(row.product.supplier));
   }).length;
 }
 
@@ -331,25 +359,38 @@ function saveCatalogChanges(showMessage) {
   const changed = [];
   isSavingCatalog = true;
 
-  generalProducts.forEach(function (row) {
+  Array.from(draftByProduct.entries()).forEach(function (entry) {
+    const productId = entry[0];
+    const draft = entry[1];
+    const row = generalProducts.find(function (item) { return item.product.id === productId; });
+    if (!row) return;
+
+    const hasPack = Object.prototype.hasOwnProperty.call(draft, "packQuantity");
+    const hasStock = Object.prototype.hasOwnProperty.call(draft, "stock");
+    const hasSupplier = Object.prototype.hasOwnProperty.call(draft, "supplier");
+    if (!hasPack && !hasStock && !hasSupplier) return;
+
     const product = row.product;
-    const state = stateFor(row);
-    const isChanged = Number(state.packQuantity) !== Number(product.packQuantity || 1)
-      || Number(state.stock) !== Number(product.stock || 0)
-      || state.supplier !== (product.supplier || "Otro");
-    if (!isChanged) return;
+    const packQuantity = hasPack ? Math.max(0.001, Number(draft.packQuantity || 1)) : Number(product.packQuantity || 1);
+    const stock = hasStock ? Number(draft.stock || 0) : Number(product.stock || 0);
+    const supplier = hasSupplier ? canonicalSupplier(draft.supplier) : canonicalSupplier(product.supplier);
+    const isChanged = packQuantity !== Number(product.packQuantity || 1)
+      || stock !== Number(product.stock || 0)
+      || supplier !== canonicalSupplier(product.supplier);
 
-    saveProduct(Object.assign({}, product, {
-      packQuantity: Math.max(0.001, Number(state.packQuantity || 1)),
-      supplier: state.supplier || "Otro",
-      stock: Number(state.stock || 0),
-    }));
-    changed.push(product.id);
+    if (isChanged) {
+      saveProduct(Object.assign({}, product, {
+        packQuantity: packQuantity,
+        supplier: supplier,
+        stock: stock,
+      }));
+      changed.push(product.id);
+    }
 
-    const draft = draftFor(product.id);
     delete draft.packQuantity;
     delete draft.supplier;
     delete draft.stock;
+    if (!Object.keys(draft).length) draftByProduct.delete(productId);
   });
 
   isSavingCatalog = false;
@@ -390,7 +431,7 @@ function orderProduct(productId) {
     id: createId("purchase_item"),
     productId: row.product.id,
     name: row.product.name,
-    supplier: state.supplier || "Otro",
+    supplier: canonicalSupplier(state.supplier),
     weighable: !!row.product.weighable,
     packQuantity: Math.max(0.001, Number(state.packQuantity || 1)),
     suggestedPacks: suggestedPacks(row, state),
