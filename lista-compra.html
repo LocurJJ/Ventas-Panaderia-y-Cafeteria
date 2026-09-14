@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/purchases.css?v=20260914">
+  <link rel="stylesheet" href="css/purchases.css?v=20260914-message">
 </head>
 <body class="shopping-body">
   <main class="shopping-shell">
@@ -19,6 +19,21 @@
     </header>
 
     <section class="shopping-status" id="shoppingStatus"></section>
+
+    <section class="purchase-message-panel" aria-labelledby="purchaseMessageTitle">
+      <div class="purchase-message-head">
+        <div>
+          <p class="eyebrow">Resumen</p>
+          <h2 id="purchaseMessageTitle">Mensaje para WhatsApp</h2>
+          <p>Incluye solamente lo nuevo desde la última vez que limpiaste el mensaje.</p>
+        </div>
+        <div class="compact-actions purchase-message-actions">
+          <button class="secondary-button" id="clearPurchaseMessageButton" type="button">Limpiar mensaje</button>
+          <button class="primary-button" id="copyPurchaseMessageButton" type="button">Copiar para WhatsApp</button>
+        </div>
+      </div>
+      <textarea id="purchaseMessage" readonly aria-label="Resumen de la compra para WhatsApp" placeholder="Las compras y los pendientes aparecerán acá."></textarea>
+    </section>
 
     <div class="shopping-layout">
       <section class="supplier-inbox">
@@ -60,6 +75,6 @@
   <script src="js/firebase-config.js"></script>
   <script>window.PANADERIA_SYNC_STORES = ["productsById", "purchaseOrdersById"];</script>
   <script src="js/db.js?v=20260914-suppliers"></script>
-  <script src="js/shopping.js?v=20260914-pending-only"></script>
+  <script src="js/shopping.js?v=20260914-message"></script>
 </body>
 </html>
