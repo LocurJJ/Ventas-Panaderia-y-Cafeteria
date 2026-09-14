@@ -3,6 +3,7 @@ const {
   listByStore,
   listProducts,
   listSales,
+  removeById,
   saveProduct,
   suppliers,
   upsertById,
@@ -71,6 +72,17 @@ function activeOrders() {
     .sort(function (a, b) {
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     });
+}
+
+function pendingEntryForProduct(productId) {
+  const orders = activeOrders();
+  for (const order of orders) {
+    const item = (order.items || []).find(function (entry) {
+      return entry.productId === productId && !entry.receivedAt;
+    });
+    if (item) return { order: order, item: item };
+  }
+  return null;
 }
 
 function draftFor(productId) {
@@ -204,9 +216,22 @@ function rowHtml(row) {
   const unit = product.weighable ? "kg" : "un.";
   const suggestion = suggestedPacks(row, state);
   const ownProduction = isOwnSupplier(state.supplier);
-  const orderControl = ownProduction
-    ? '<span class="no-purchase">Elaboración propia</span>'
-    : '<label class="order-quantity"><span class="suggestion-hint">Sugerido: ' + suggestion + ' packs</span><input type="number" min="0" step="1" inputmode="numeric" value="' + (state.orderPacks || "") + '" placeholder="' + suggestion + '" data-field="orderPacks" aria-label="Packs de ' + escapeHtml(product.name) + '"></label>';
+  const pending = pendingEntryForProduct(product.id);
+  let orderControl = '<span class="no-purchase">Elaboración propia</span>';
+
+  if (pending) {
+    orderControl =
+      '<div class="row-order-control pending-control">' +
+        '<label class="order-quantity"><span>Ordenado: ' + numberText(pending.item.orderedPacks) + ' packs</span><input type="number" value="' + Number(pending.item.orderedPacks || 0) + '" disabled aria-label="Packs pendientes de ' + escapeHtml(product.name) + '"></label>' +
+        '<button class="row-order-button pending" type="button" data-order-action="remove">Pendiente</button>' +
+      '</div>';
+  } else if (!ownProduction) {
+    orderControl =
+      '<div class="row-order-control">' +
+        '<label class="order-quantity"><span class="suggestion-hint">Sugerido: ' + suggestion + ' packs</span><input type="number" min="0" step="1" inputmode="numeric" value="' + (state.orderPacks || "") + '" placeholder="' + suggestion + '" data-field="orderPacks" aria-label="Packs de ' + escapeHtml(product.name) + '"></label>' +
+        '<button class="row-order-button order" type="button" data-order-action="add">Ordenar</button>' +
+      '</div>';
+  }
 
   return '<tr data-product-id="' + escapeHtml(product.id) + '">' +
     '<td><strong>' + escapeHtml(product.name) + '</strong></td>' +
@@ -272,11 +297,9 @@ function renderCatalog() {
   $("suggestionEmptyText").textContent = catalogView === "important"
     ? "Cuando haya ventas registradas aparecerán aquí."
     : (catalogSearch ? "Probá con otro nombre, código o mayorista." : "No hay productos cargados.");
-  $("createOrderButton").disabled = generalProducts.length === 0;
   renderPagination();
   renderSummary();
   renderSaveStatus();
-  updateSelectedCount();
 }
 
 function updateRowSuggestion(rowElement) {
@@ -288,13 +311,6 @@ function updateRowSuggestion(rowElement) {
   const suggestion = suggestedPacks(row, stateFor(row));
   hint.textContent = "Sugerido: " + suggestion + " packs";
   orderInput.placeholder = suggestion;
-}
-
-function updateSelectedCount() {
-  const count = Array.from(draftByProduct.values()).filter(function (draft) {
-    return Number(draft.orderPacks || 0) > 0;
-  }).length;
-  $("selectedProductsText").textContent = count + (count === 1 ? " producto seleccionado" : " productos seleccionados");
 }
 
 function updateDraft(event) {
@@ -309,7 +325,6 @@ function updateDraft(event) {
 
   if (field === "stock" || field === "packQuantity") updateRowSuggestion(rowElement);
   renderSaveStatus();
-  updateSelectedCount();
 }
 
 function saveCatalogChanges(showMessage) {
@@ -347,56 +362,92 @@ function saveCatalogChanges(showMessage) {
   return changed.length;
 }
 
-function createOrder() {
+function orderProduct(productId) {
   saveCatalogChanges(false);
   buildCatalog();
-  const items = [];
 
-  draftByProduct.forEach(function (draft, productId) {
-    const packs = Math.max(0, Math.floor(Number(draft.orderPacks || 0)));
-    if (!packs) return;
-    const row = generalProducts.find(function (item) { return item.product.id === productId; });
-    if (!row) return;
-    const state = stateFor(row);
-    if (isOwnSupplier(state.supplier)) return;
-
-    items.push({
-      id: createId("purchase_item"),
-      productId: row.product.id,
-      name: row.product.name,
-      supplier: state.supplier || "Otro",
-      weighable: !!row.product.weighable,
-      packQuantity: Math.max(0.001, Number(state.packQuantity || 1)),
-      suggestedPacks: suggestedPacks(row, state),
-      orderedPacks: packs,
-      weeklySales: Number(row.weeklySales.toFixed(3)),
-      stockAtCreation: Number(state.stock),
-      receivedAt: null,
-    });
+  const row = generalProducts.find(function (entry) {
+    return entry.product.id === productId;
   });
-
-  if (!items.length) {
-    alert("Indicá cuántos packs querés pedir en al menos un producto.");
+  if (!row || pendingEntryForProduct(productId)) {
+    renderCatalog();
     return;
   }
 
-  const supplierCount = new Set(items.map(function (item) { return item.supplier; })).size;
-  const order = {
-    id: createId("purchase_order"),
-    createdAt: new Date().toISOString(),
-    status: "active",
-    items: items,
-  };
-  upsertById("purchaseOrdersById", order);
+  const state = stateFor(row);
+  if (isOwnSupplier(state.supplier)) {
+    alert("Los productos de elaboración propia no se agregan a la orden de compra.");
+    return;
+  }
 
-  draftByProduct.forEach(function (draft, productId) {
-    delete draft.orderPacks;
-    if (!Object.keys(draft).length) draftByProduct.delete(productId);
+  const packs = state.orderPacks || suggestedPacks(row, state);
+  if (packs < 1) {
+    alert("Ingresá cuántos packs querés ordenar.");
+    return;
+  }
+
+  const item = {
+    id: createId("purchase_item"),
+    productId: row.product.id,
+    name: row.product.name,
+    supplier: state.supplier || "Otro",
+    weighable: !!row.product.weighable,
+    packQuantity: Math.max(0.001, Number(state.packQuantity || 1)),
+    suggestedPacks: suggestedPacks(row, state),
+    orderedPacks: packs,
+    weeklySales: Number(row.weeklySales.toFixed(3)),
+    stockAtCreation: Number(state.stock),
+    receivedAt: null,
+  };
+
+  const existingOrder = activeOrders()[0];
+  const order = existingOrder
+    ? Object.assign({}, existingOrder, {
+        items: (existingOrder.items || []).concat(item),
+        status: "active",
+        completedAt: null,
+      })
+    : {
+        id: createId("purchase_order"),
+        createdAt: new Date().toISOString(),
+        status: "active",
+        items: [item],
+      };
+
+  upsertById("purchaseOrdersById", order);
+  const draft = draftFor(productId);
+  delete draft.orderPacks;
+  if (!Object.keys(draft).length) draftByProduct.delete(productId);
+  renderCatalog();
+  renderActiveOrders();
+}
+
+function removePendingProduct(productId) {
+  const pending = pendingEntryForProduct(productId);
+  if (!pending) {
+    renderCatalog();
+    return;
+  }
+
+  if (!confirm("¿Quitar " + pending.item.name + " de la orden de compra?")) return;
+
+  const remainingItems = (pending.order.items || []).filter(function (item) {
+    return item.id !== pending.item.id;
   });
+
+  if (!remainingItems.length) {
+    removeById("purchaseOrdersById", pending.order.id);
+  } else {
+    const stillPending = remainingItems.some(function (item) { return !item.receivedAt; });
+    upsertById("purchaseOrdersById", Object.assign({}, pending.order, {
+      items: remainingItems,
+      status: stillPending ? "active" : "completed",
+      completedAt: stillPending ? null : new Date().toISOString(),
+    }));
+  }
 
   renderCatalog();
   renderActiveOrders();
-  alert("Orden creada para " + supplierCount + (supplierCount === 1 ? " mayorista." : " mayoristas."));
 }
 
 function renderActiveOrders() {
@@ -421,6 +472,13 @@ function changePage(nextPage) {
 
 $("suggestionRows").addEventListener("input", updateDraft);
 $("suggestionRows").addEventListener("change", updateDraft);
+$("suggestionRows").addEventListener("click", function (event) {
+  const button = event.target.closest("[data-order-action]");
+  const row = event.target.closest("[data-product-id]");
+  if (!button || !row) return;
+  if (button.dataset.orderAction === "add") orderProduct(row.dataset.productId);
+  if (button.dataset.orderAction === "remove") removePendingProduct(row.dataset.productId);
+});
 
 document.querySelector(".catalog-tabs").addEventListener("click", function (event) {
   const button = event.target.closest("[data-catalog-view]");
@@ -446,7 +504,6 @@ $("previousCatalogPage").addEventListener("click", function () { changePage(cata
 $("nextCatalogPage").addEventListener("click", function () { changePage(catalogPage + 1); });
 $("refreshSuggestionsButton").addEventListener("click", renderCatalog);
 $("saveCatalogButton").addEventListener("click", function () { saveCatalogChanges(true); });
-$("createOrderButton").addEventListener("click", createOrder);
 
 window.addEventListener("panaderia:store-changed", function (event) {
   const name = event.detail && event.detail.name;
