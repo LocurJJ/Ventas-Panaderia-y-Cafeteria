@@ -100,7 +100,7 @@ function supplierGroups() {
       group.pendingEntries = group.entries.filter(function (entry) {
         return !entry.item.receivedAt;
       });
-      group.orderCount = new Set(group.entries.map(function (entry) {
+      group.orderCount = new Set(group.pendingEntries.map(function (entry) {
         return entry.order.id;
       })).size;
       return group;
@@ -155,7 +155,7 @@ function renderDetail(groups) {
   $("supplierDetail").innerHTML =
     '<header class="supplier-detail-head"><div><p class="eyebrow">Mayorista</p><h2>' + escapeHtml(selected.supplier) + '</h2><span>' + orderText + '</span></div><span class="notification-badge">' + selected.pendingEntries.length + '</span></header>' +
     '<div class="shopping-item-list">' +
-      selected.entries.map(function (entry) {
+      selected.pendingEntries.map(function (entry) {
         const item = entry.item;
         const received = !!item.receivedAt;
         const unit = item.weighable ? "kg" : "un.";
