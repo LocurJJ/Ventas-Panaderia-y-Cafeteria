@@ -65,6 +65,108 @@ function canonicalSupplier(value) {
   return aliases[normalizedSupplier(value)] || String(value || "Otros").trim();
 }
 
+
+function purchaseMessageEntries() {
+  return listByStore("purchaseOrdersById")
+    .flatMap(function (order) {
+      return (order.items || []).map(function (item) {
+        return { order: order, item: item };
+      });
+    })
+    .filter(function (entry) {
+      return !entry.item.messageClearedAt;
+    })
+    .sort(function (a, b) {
+      return new Date(a.order.createdAt || 0) - new Date(b.order.createdAt || 0);
+    });
+}
+
+function purchaseMessageLine(entry, received) {
+  const item = entry.item;
+  const supplier = canonicalSupplier(item.supplier);
+  const packs = received ? Number(item.receivedPacks || 0) : Number(item.orderedPacks || 0);
+  const units = received ? Number(item.receivedUnits || 0) : packs * Number(item.packQuantity || 1);
+  const unit = item.weighable ? "kg" : "un.";
+  let line = "- " + item.name + ": " + numberText(packs) + " pack" + (packs === 1 ? "" : "s");
+  if (received) line += " (" + numberText(units) + " " + unit + ")";
+  if (supplier) line += " · " + supplier;
+  return line;
+}
+
+function buildPurchaseMessage() {
+  const entries = purchaseMessageEntries();
+  if (!entries.length) return "";
+
+  const received = entries.filter(function (entry) { return !!entry.item.receivedAt; });
+  const pending = entries.filter(function (entry) { return !entry.item.receivedAt; });
+  const lines = ["Se consiguió:"];
+
+  if (received.length) {
+    received.forEach(function (entry) {
+      lines.push(purchaseMessageLine(entry, true));
+    });
+  } else {
+    lines.push("- Nada todavía");
+  }
+
+  lines.push("", "Pendiente:");
+  if (pending.length) {
+    pending.forEach(function (entry) {
+      lines.push(purchaseMessageLine(entry, false));
+    });
+  } else {
+    lines.push("- Nada");
+  }
+
+  return lines.join("\n");
+}
+
+function renderPurchaseMessage() {
+  const message = buildPurchaseMessage();
+  $("purchaseMessage").value = message;
+  $("copyPurchaseMessageButton").disabled = !message;
+  $("clearPurchaseMessageButton").disabled = !message;
+}
+
+async function copyPurchaseMessage() {
+  const message = buildPurchaseMessage();
+  if (!message) return;
+
+  try {
+    await navigator.clipboard.writeText(message);
+  } catch (error) {
+    const textarea = $("purchaseMessage");
+    textarea.focus();
+    textarea.select();
+    if (!document.execCommand("copy")) {
+      alert("No se pudo copiar automáticamente. Mantené apretado el texto y elegí Copiar.");
+      return;
+    }
+  }
+
+  alert("Mensaje copiado. Ya podés pegarlo en WhatsApp.");
+}
+
+function clearPurchaseMessage() {
+  const entries = purchaseMessageEntries();
+  if (!entries.length) return;
+  if (!confirm("¿Limpiar este resumen? No se borrarán el stock ni los pedidos.")) return;
+
+  const clearedAt = new Date().toISOString();
+  const orderIds = new Set(entries.map(function (entry) { return entry.order.id; }));
+
+  listByStore("purchaseOrdersById").forEach(function (order) {
+    if (!orderIds.has(order.id)) return;
+    const updatedItems = (order.items || []).map(function (item) {
+      if (item.messageClearedAt) return item;
+      return Object.assign({}, item, { messageClearedAt: clearedAt });
+    });
+    upsertById("purchaseOrdersById", Object.assign({}, order, { items: updatedItems }));
+  });
+
+  render();
+}
+
 function activeOrders() {
   return listByStore("purchaseOrdersById")
     .filter(function (order) {
@@ -174,6 +276,7 @@ function renderDetail(groups) {
 function render() {
   const groups = supplierGroups();
   renderStatus(groups);
+  renderPurchaseMessage();
   renderInbox(groups);
   renderDetail(groups);
 }
@@ -247,6 +350,7 @@ function confirmReceived() {
       receivedPacks: packs,
       receivedUnits: units,
       receivedAt: new Date().toISOString(),
+      messageClearedAt: null,
     });
   });
   const completed = updatedItems.every(function (item) { return !!item.receivedAt; });
@@ -278,6 +382,8 @@ $("supplierDetail").addEventListener("click", function (event) {
   openReceiveDialog(button.dataset.orderId, button.dataset.itemId);
 });
 
+$("copyPurchaseMessageButton").addEventListener("click", copyPurchaseMessage);
+$("clearPurchaseMessageButton").addEventListener("click", clearPurchaseMessage);
 $("receivedPacksInput").addEventListener("input", updateStockPreview);
 $("cancelReceiveButton").addEventListener("click", function () {
   $("receiveDialog").close();
