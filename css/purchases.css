@@ -805,3 +805,70 @@
     height: 42px;
   }
 }
+
+
+.purchase-message-panel {
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.purchase-message-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+.purchase-message-head h2 {
+  margin: 3px 0 5px;
+  font-size: 1.2rem;
+}
+
+.purchase-message-head p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.purchase-message-head .eyebrow {
+  color: var(--accent);
+}
+
+.purchase-message-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.purchase-message-panel textarea {
+  width: 100%;
+  min-height: 190px;
+  padding: 13px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.purchase-message-panel button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+@media (max-width: 620px) {
+  .purchase-message-head,
+  .purchase-message-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-message-actions button {
+    width: 100%;
+  }
+}
