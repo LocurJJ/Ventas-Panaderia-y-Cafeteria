@@ -300,7 +300,7 @@ function normalizeProduct(rawProduct) {
     cost: Number(rawProduct.cost || 0),
     salePrice: Number(rawProduct.salePrice || calculateSalePrice(rawProduct.cost)),
     barcode: String(rawProduct.barcode || "").trim(),
-    stock: Number(rawProduct.stock || 0),
+    stock: Math.max(0, Number(rawProduct.stock || 0)),
     supplier: rawProduct.supplier || "Otro",
     category: rawProduct.category || "Panaderia",
     packQuantity: Math.max(0.001, Number(rawProduct.packQuantity || 1)),
@@ -316,9 +316,60 @@ function saveProduct(rawProduct) {
   return upsertById("productsById", product);
 }
 
+
+function changeProductStock(productId, value, mode) {
+  const records = readStore("productsById", {});
+  const currentProduct = records[productId];
+  if (!currentProduct) throw new Error("No se encontró el producto.");
+
+  const amount = Number(value || 0);
+  const calculateStock = (currentStock) => mode === "set"
+    ? Math.max(0, amount)
+    : Math.max(0, Number(currentStock || 0) + amount);
+
+  records[productId] = {
+    ...currentProduct,
+    stock: calculateStock(currentProduct.stock),
+    updatedAt: new Date().toISOString(),
+  };
+  saveLocalStore("productsById", records);
+  dispatchStoreChange("productsById");
+
+  const productRef = remoteRef("productsById")?.child(productId);
+  if (productRef) {
+    const transaction = productRef.transaction((remoteProduct) => {
+      const source = remoteProduct || currentProduct;
+      return {
+        ...source,
+        stock: calculateStock(source.stock),
+        updatedAt: new Date().toISOString(),
+      };
+    }).then((result) => {
+      if (!result.committed) return;
+      const latest = readStore("productsById", {});
+      latest[productId] = result.snapshot.val();
+      saveLocalStore("productsById", latest);
+      dispatchStoreChange("productsById");
+    });
+    rememberPending(transaction, `productsById/${productId}/stock`);
+  }
+
+  return records[productId];
+}
+
+function adjustProductStock(productId, delta) {
+  return changeProductStock(productId, delta, "adjust");
+}
+
+function setProductStock(productId, stock) {
+  return changeProductStock(productId, stock, "set");
+}
+
 function listProducts() {
   seedProductsIfEmpty();
-  return listByStore("productsById").sort((a, b) => a.name.localeCompare(b.name));
+  return listByStore("productsById")
+    .map((product) => ({ ...product, stock: Math.max(0, Number(product.stock || 0)) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function initRemoteSync() {
@@ -357,6 +408,7 @@ async function flushWrites() {
 
 window.DB = {
   addShiftMovement,
+  adjustProductStock,
   createId,
   flushWrites,
   getOpenShift,
@@ -375,6 +427,7 @@ window.DB = {
   saveProduct,
   saveSale,
   seedProductsIfEmpty,
+  setProductStock,
   suppliers,
   updateShift,
   upsertById,
