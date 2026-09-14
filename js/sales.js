@@ -1,5 +1,6 @@
 const {
   addShiftMovement,
+  adjustProductStock,
   createId,
   calculateSalePrice,
   closeShift,
@@ -15,6 +16,8 @@ const {
   saveSale,
   seedProductsIfEmpty,
   suppliers,
+  setProductStock,
+  upsertById,
   writeStore,
 } = window.DB;
 
@@ -107,14 +110,9 @@ function loadProducts() {
 }
 
 function adjustStockForItems(items, direction) {
-  const records = readStore("productsById", {});
   (items || []).forEach((item) => {
-    const product = records[item.productId];
-    if (!product) return;
-    product.stock = Number(product.stock || 0) + (Number(item.quantity || 0) * direction);
-    product.updatedAt = new Date().toISOString();
+    adjustProductStock(item.productId, Number(item.quantity || 0) * direction);
   });
-  writeStore("productsById", records);
   loadProducts();
 }
 
@@ -459,14 +457,168 @@ function renderMiniProducts() {
     `).join("");
 }
 
+
+function normalizedText(value) {
+  return String(value || "")
+    .toLocaleLowerCase("es-AR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function isOwnProduction(product) {
+  return normalizedText(product?.supplier) === "elaboracion propia";
+}
+
+function activePurchaseOrders() {
+  return listByStore("purchaseOrdersById")
+    .filter((order) => order.status !== "completed" && (order.items || []).some((item) => !item.receivedAt))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+function pendingPurchaseForProduct(productId) {
+  for (const order of activePurchaseOrders()) {
+    const item = (order.items || []).find((entry) => entry.productId === productId && !entry.receivedAt);
+    if (item) return { order, item };
+  }
+  return null;
+}
+
+function weeklySalesForProduct(productId) {
+  const since = Date.now() - (7 * 24 * 60 * 60 * 1000);
+  return listSales().reduce((total, sale) => {
+    if (new Date(sale.date || 0).getTime() < since) return total;
+    return total + (sale.items || []).reduce((sum, item) => {
+      return sum + (item.productId === productId ? Number(item.quantity || 0) : 0);
+    }, 0);
+  }, 0);
+}
+
+function refreshMiniStockControls(product) {
+  const addButton = $("addMiniStockButton");
+  const noStockButton = $("noStockAndOrderButton");
+  const isExisting = !!product?.id;
+
+  addButton.disabled = !isExisting;
+  $("miniStockAddInput").disabled = !isExisting;
+  $("miniStockHelp").textContent = isExisting
+    ? "Escribí lo que ingresó y tocá Sumar al stock."
+    : "Primero guardá el producto; después podrás sumar mercadería.";
+
+  noStockButton.classList.toggle("hidden", local !== "Central" || !isExisting);
+  if (local !== "Central" || !isExisting) return;
+
+  const pending = pendingPurchaseForProduct(product.id);
+  noStockButton.disabled = !!pending;
+  noStockButton.classList.toggle("pending", !!pending);
+  noStockButton.textContent = pending
+    ? "Pedido pendiente"
+    : (isOwnProduction(product) ? "Sin stock" : "Sin stock y pedir");
+}
+
+async function addMiniStock() {
+  const product = products.find((item) => item.id === selectedMiniProductId);
+  if (!product) return;
+
+  const amount = Number($("miniStockAddInput").value || 0);
+  if (!(amount > 0)) {
+    alert("Ingresá una cantidad mayor que cero.");
+    return;
+  }
+
+  try {
+    adjustProductStock(product.id, amount);
+    await window.DB.flushWrites();
+    loadProducts();
+    selectMiniProduct(product.id);
+    renderProducts();
+    if (local === "Cafeteria") renderCafeProducts();
+    alert("Se sumaron " + amount.toLocaleString("es-AR", { maximumFractionDigits: 3 }) + " " + (product.weighable ? "kg" : "unidades") + " al stock.");
+  } catch (error) {
+    console.error(error);
+    alert("No se pudo sumar el stock. Revisá la conexión e intentá nuevamente.");
+  }
+}
+
+async function markNoStockAndOrder() {
+  if (local !== "Central") return;
+  const product = products.find((item) => item.id === selectedMiniProductId);
+  if (!product) return;
+
+  const pending = pendingPurchaseForProduct(product.id);
+  if (pending) {
+    alert("Este producto ya tiene un pedido pendiente.");
+    refreshMiniStockControls(product);
+    return;
+  }
+
+  const ownProduction = isOwnProduction(product);
+  const question = ownProduction
+    ? "¿Confirmás que no queda stock en Central, Sucursal ni Cafetería? El stock quedará en 0."
+    : "¿Confirmás que no queda stock en Central, Sucursal ni Cafetería? El stock quedará en 0 y se agregará a la orden de compra.";
+  if (!confirm(question)) return;
+
+  try {
+    setProductStock(product.id, 0);
+
+    if (!ownProduction) {
+      const packQuantity = Math.max(0.001, Number(product.packQuantity || 1));
+      const weeklySales = weeklySalesForProduct(product.id);
+      const suggestedPacks = Math.max(1, Math.ceil(weeklySales / packQuantity));
+      const item = {
+        id: createId("purchase_item"),
+        productId: product.id,
+        name: product.name,
+        supplier: product.supplier || "Otros",
+        weighable: !!product.weighable,
+        packQuantity,
+        suggestedPacks,
+        orderedPacks: suggestedPacks,
+        weeklySales: Number(weeklySales.toFixed(3)),
+        stockAtCreation: 0,
+        receivedAt: null,
+      };
+      const existingOrder = activePurchaseOrders()[0];
+      const order = existingOrder
+        ? {
+            ...existingOrder,
+            items: (existingOrder.items || []).concat(item),
+            status: "active",
+            completedAt: null,
+          }
+        : {
+            id: createId("purchase_order"),
+            createdAt: new Date().toISOString(),
+            status: "active",
+            items: [item],
+          };
+      upsertById("purchaseOrdersById", order);
+    }
+
+    await window.DB.flushWrites();
+    loadProducts();
+    selectMiniProduct(product.id);
+    renderProducts();
+    if (local === "Cafeteria") renderCafeProducts();
+    alert(ownProduction
+      ? "El stock quedó en 0. Al ser elaboración propia, no se agregó a Compra."
+      : "El stock quedó en 0 y el producto se agregó como pendiente en Compra.");
+  } catch (error) {
+    console.error(error);
+    alert("No se pudo confirmar la falta de stock. Revisá la conexión e intentá nuevamente.");
+  }
+}
+
 function resetMiniProductForm() {
   selectedMiniProductId = "";
   $("miniProductForm").reset();
   $("miniProductId").value = "";
   $("miniStockInput").value = "0";
+  $("miniStockAddInput").value = "0";
   $("miniSupplierInput").value = "Otro";
   $("miniCategoryInput").value = "Panaderia";
   $("miniProductTitle").textContent = "Anadir producto";
+  refreshMiniStockControls(null);
   renderMiniProducts();
 }
 
@@ -479,11 +631,13 @@ function selectMiniProduct(id) {
   $("miniCostInput").value = product.cost || 0;
   $("miniSaleInput").value = product.salePrice || 0;
   $("miniBarcodeInput").value = product.barcode || "";
-  $("miniStockInput").value = product.stock || 0;
+  $("miniStockInput").value = Math.max(0, Number(product.stock || 0));
+  $("miniStockAddInput").value = "0";
   $("miniSupplierInput").value = product.supplier || "Otro";
   $("miniCategoryInput").value = product.category || "Panaderia";
   $("miniWeighableInput").checked = !!product.weighable;
   $("miniProductTitle").textContent = "Modificar producto";
+  refreshMiniStockControls(product);
   renderMiniProducts();
 }
 
@@ -497,7 +651,7 @@ function readMiniProductForm() {
     cost,
     salePrice,
     barcode: $("miniBarcodeInput").value,
-    stock: $("miniStockInput").value,
+    stock: Math.max(0, Number($("miniStockInput").value || 0)),
     supplier: $("miniSupplierInput").value,
     category: $("miniCategoryInput").value,
     weighable: $("miniWeighableInput").checked,
@@ -936,6 +1090,16 @@ function setupEvents() {
       renderProducts();
       renderMiniProducts();
       if (local === "Cafeteria") renderCafeProducts();
+      if (selectedMiniProductId) {
+        const selected = products.find((product) => product.id === selectedMiniProductId);
+        if (selected) {
+          $("miniStockInput").value = Math.max(0, Number(selected.stock || 0));
+          refreshMiniStockControls(selected);
+        }
+      }
+    }
+    if (storeName === "purchaseOrdersById" && selectedMiniProductId) {
+      refreshMiniStockControls(products.find((product) => product.id === selectedMiniProductId));
     }
     if (["salesById", "shiftsById"].includes(storeName)) {
       if (activeView === "shift") renderShift();
@@ -975,9 +1139,11 @@ function setupEvents() {
 
   document.querySelector(".quick-stock").addEventListener("click", (event) => {
     const button = event.target.closest("[data-stock-delta]");
-    if (!button) return;
-    $("miniStockInput").value = Number($("miniStockInput").value || 0) + Number(button.dataset.stockDelta || 0);
+    if (!button || $("miniStockAddInput").disabled) return;
+    $("miniStockAddInput").value = Number($("miniStockAddInput").value || 0) + Number(button.dataset.stockDelta || 0);
   });
+  $("addMiniStockButton").addEventListener("click", addMiniStock);
+  $("noStockAndOrderButton").addEventListener("click", markNoStockAndOrder);
 
   $("miniProductForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -986,7 +1152,7 @@ function setupEvents() {
       loadProducts();
       selectMiniProduct(product.id);
       renderProducts();
-      alert("Producto guardado.");
+      alert("Datos del producto guardados.");
     } catch (error) {
       alert(error.message);
     }
