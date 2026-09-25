@@ -142,6 +142,50 @@ function addToWhatsapp(product) {
   renderWhatsapp();
 }
 
+
+function exportProductsToJson() {
+  refreshProducts();
+  if (!products.length) {
+    alert("No hay productos para exportar.");
+    return;
+  }
+
+  const exportedAt = new Date().toISOString();
+  const payload = {
+    type: "panaderia-josue-products",
+    version: 1,
+    exportedAt,
+    productCount: products.length,
+    products: products.map((product) => ({
+      id: product.id,
+      name: product.name || "",
+      cost: Number(product.cost || 0),
+      salePrice: Number(product.salePrice || 0),
+      barcode: product.barcode || "",
+      stock: Math.max(0, Number(product.stock || 0)),
+      packQuantity: Math.max(0.001, Number(product.packQuantity || 1)),
+      supplier: canonicalSupplier(product.supplier),
+      category: product.category || "Panaderia",
+      weighable: !!product.weighable,
+      updatedAt: product.updatedAt || null,
+    })),
+  };
+
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const date = exportedAt.slice(0, 10);
+  link.href = url;
+  link.download = "productos-panaderia-josue-" + date + ".json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  alert("Se exportaron " + products.length + " productos.");
+}
+
 function productFromImport(rawProduct) {
   const cost = Number(rawProduct.cost ?? rawProduct.precioCompra ?? rawProduct.precioCosto ?? 0);
   const importedSalePrice = Number(rawProduct.salePrice ?? rawProduct.precioVenta ?? rawProduct.price ?? 0);
@@ -213,6 +257,7 @@ function setupEvents() {
 
   $("productSearch").addEventListener("input", renderProducts);
   $("newProductButton").addEventListener("click", resetForm);
+  $("exportProductsButton").addEventListener("click", exportProductsToJson);
   $("importProductsButton").addEventListener("click", () => $("importProductsInput").click());
   $("importProductsInput").addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
