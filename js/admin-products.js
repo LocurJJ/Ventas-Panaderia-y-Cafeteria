@@ -10,6 +10,10 @@ const WHATSAPP_KEY = "whatsappProducts";
 
 let products = [];
 let selectedId = "";
+let stockBaseline = null;
+const stockInputIds = { Central: "stockCentralInput", Sucursal: "stockSucursalInput", Cafeteria: "stockCafeInput" };
+function formStocks() { return Object.fromEntries(Object.entries(stockInputIds).map(([local, id]) => [local, Number($(id).value || 0)])); }
+function updateStockTotal() { $("stockInput").value = window.DB.totalStock({stockByLocal: formStocks()}); }
 let changedProducts = window.DB.readStore(WHATSAPP_KEY, []);
 
 const $ = (id) => document.getElementById(id);
@@ -72,7 +76,8 @@ function renderProducts() {
       <button type="button" class="${product.id === selectedId ? "active" : ""}" data-product-id="${product.id}">
         <strong>${product.name}</strong>
         <small>Venta: ${money(product.salePrice)} | Costo: ${money(product.cost)}</small>
-        <small>Stock: ${product.stock || 0} ${product.weighable ? "kg" : "un."} | Pack: ${product.packQuantity || 1} | ${canonicalSupplier(product.supplier)} | ${product.category || "Panaderia"}</small>
+        <small>Central: ${product.stockByLocal.Central} · Sucursal: ${product.stockByLocal.Sucursal} · Cafetería: ${product.stockByLocal.Cafeteria}</small>
+        <small>Stock general: ${product.stock || 0} ${product.weighable ? "kg" : "un."} | Pack: ${product.packQuantity || 1} | ${canonicalSupplier(product.supplier)} | ${product.category || "Panaderia"}</small>
         <small>Codigo: ${product.barcode || "Sin codigo"}</small>
       </button>
     `).join("");
@@ -86,6 +91,9 @@ function renderWhatsapp() {
 
 function resetForm() {
   selectedId = "";
+  stockBaseline = null;
+  $("stockHistory").textContent = "";
+  $("stockAllocationNotice").textContent = "Cargá las existencias de cada local. El general se calcula automáticamente.";
   $("productForm").reset();
   $("productId").value = "";
   $("stockInput").value = "0";
@@ -108,6 +116,19 @@ function selectProduct(id) {
   $("saleInput").value = product.salePrice || 0;
   $("barcodeInput").value = product.barcode || "";
   $("stockInput").value = product.stock || 0;
+  stockBaseline = { ...product.stockByLocal };
+  Object.entries(stockInputIds).forEach(([local, id]) => { $(id).value = product.stockByLocal[local]; });
+  $("stockAllocationNotice").textContent = product.stockAllocationPending
+    ? "Pendiente de reparto: el stock anterior está provisionalmente en Central. Indicá las cantidades reales de cada local y guardá."
+    : "Stock general = Central + Sucursal + Cafetería. Un valor negativo indica ventas que requieren regularizar el conteo.";
+  const history = Object.values(product.stockMovements || {}).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20);
+  $("stockHistory").replaceChildren(...history.map(movement => {
+    const line = document.createElement("p");
+    line.textContent = new Date(movement.date).toLocaleString("es-AR") + " · " + movement.reason + " · " +
+      (movement.local ? movement.local + ": " + movement.before + " → " + movement.after :
+        Object.entries(movement.after).map(([local, n]) => local + ": " + n).join(" · "));
+    return line;
+  }));
   $("packQuantityInput").value = product.packQuantity || 1;
   $("supplierInput").value = canonicalSupplier(product.supplier);
   $("categoryInput").value = product.category || "Panaderia";
@@ -127,7 +148,7 @@ function readForm() {
     cost,
     salePrice,
     barcode: $("barcodeInput").value,
-    stock: $("stockInput").value,
+    stockByLocal: formStocks(),
     packQuantity: $("packQuantityInput").value,
     supplier: $("supplierInput").value,
     category: $("categoryInput").value,
@@ -153,7 +174,7 @@ function exportProductsToJson() {
   const exportedAt = new Date().toISOString();
   const payload = {
     type: "panaderia-josue-products",
-    version: 1,
+    version: 2,
     exportedAt,
     productCount: products.length,
     products: products.map((product) => ({
@@ -162,7 +183,8 @@ function exportProductsToJson() {
       cost: Number(product.cost || 0),
       salePrice: Number(product.salePrice || 0),
       barcode: product.barcode || "",
-      stock: Math.max(0, Number(product.stock || 0)),
+      stock: Number(product.stock || 0),
+      stockByLocal: product.stockByLocal,
       packQuantity: Math.max(0.001, Number(product.packQuantity || 1)),
       supplier: canonicalSupplier(product.supplier),
       category: product.category || "Panaderia",
@@ -196,6 +218,7 @@ function productFromImport(rawProduct) {
     salePrice: importedSalePrice || calculateSalePrice(cost),
     barcode: String(rawProduct.barcode ?? rawProduct.codigoBarra ?? rawProduct.codigo ?? "").trim(),
     stock: Number(rawProduct.stock ?? 0),
+    ...(rawProduct.stockByLocal ? {stockByLocal: rawProduct.stockByLocal} : {}),
     packQuantity: Number(rawProduct.packQuantity ?? rawProduct.cantidadPorPack ?? 1),
     supplier: canonicalSupplier(rawProduct.supplier ?? rawProduct.proveedor ?? "Otros"),
     category: rawProduct.category ?? rawProduct.categoria ?? "Panaderia",
@@ -224,7 +247,7 @@ async function importProductsFromFile(file) {
   if (importedProducts.length === 0) {
     throw new Error("No encontre productos para importar.");
   }
-  if (!confirm(`Importar ${importedProducts.length} productos? Si ya existe el mismo codigo de barra, se actualiza.`)) {
+  if (!confirm(`Importar ${importedProducts.length} productos? Si ya existe el mismo código, se actualizan sus datos y se conserva su stock por local.`)) {
     return;
   }
 
@@ -233,12 +256,14 @@ async function importProductsFromFile(file) {
     saveProduct({ ...product, id: findImportId(product) });
     importedCount += 1;
   });
+  await window.DB.flushWrites();
   refreshProducts();
   resetForm();
   alert(`Listo. Se importaron ${importedCount} productos.`);
 }
 
 function setupEvents() {
+  Object.values(stockInputIds).forEach(id => $(id).addEventListener("input", updateStockTotal));
   window.addEventListener("panaderia:store-changed", (event) => {
     const storeName = event.detail?.name;
     if (storeName === "productsById") {
@@ -280,10 +305,16 @@ function setupEvents() {
     if (button) selectProduct(button.dataset.productId);
   });
 
-  $("productForm").addEventListener("submit", (event) => {
+  $("productForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
+      const quantities = formStocks();
       const product = saveProduct(readForm());
+      await window.DB.flushWrites();
+      if (stockBaseline && (product.stockAllocationPending || window.DB.STOCK_LOCALS.some(local => quantities[local] !== stockBaseline[local]))) {
+        window.DB.setProductStocks(product.id, quantities, stockBaseline);
+        await window.DB.flushWrites();
+      }
       addToWhatsapp(product);
       refreshProducts();
       selectProduct(product.id);

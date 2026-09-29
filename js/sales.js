@@ -22,7 +22,7 @@ const {
 } = window.DB;
 
 const params = new URLSearchParams(window.location.search);
-const local = params.get("local") || "Central";
+const local = window.DB.STOCK_LOCALS.includes(params.get("local")) ? params.get("local") : "Central";
 const clients = ["Consumidor final", "Lorena", "Ulices", "Josue", "Juan y Bety", "Gera", "Laura"];
 const accountClients = ["Lorena", "Ulices"];
 
@@ -106,23 +106,23 @@ function tableTotal(order = getTableOrder()) {
 
 function loadProducts() {
   seedProductsIfEmpty();
-  products = listProducts();
+  products = listProducts().map(product => ({ ...product, generalStock: product.stock, stock: window.DB.productStock(product, local) }));
 }
 
-function adjustStockForItems(items, direction) {
-  (items || []).forEach((item) => {
-    adjustProductStock(item.productId, Number(item.quantity || 0) * direction);
+function adjustStockForItems(sale, direction) {
+  const quantities = new Map();
+  (sale.items || []).forEach(item => quantities.set(item.productId,
+    (quantities.get(item.productId) || 0) + Number(item.quantity || 0)));
+  quantities.forEach((quantity, productId) => {
+    adjustProductStock(productId, quantity * direction, sale.local || local, {
+      id: `${direction < 0 ? "sale" : "void"}_${sale.id}`,
+      reason: direction < 0 ? "Venta / cuenta de cliente" : "Anulación de venta / cuenta"
+    });
   });
   loadProducts();
 }
-
-function applySaleStock(sale) {
-  adjustStockForItems(sale.items, -1);
-}
-
-function restoreSaleStock(sale) {
-  adjustStockForItems(sale.items, 1);
-}
+function applySaleStock(sale) { adjustStockForItems(sale, -1); }
+function restoreSaleStock(sale) { adjustStockForItems(sale, 1); }
 
 function saveClientAccount(entry) {
   const records = readStore(CLIENT_ACCOUNT_STORE, {});
@@ -173,7 +173,7 @@ async function deleteClientAccountEntry(entryId) {
   try {
     delete records[entryId];
     writeStore(CLIENT_ACCOUNT_STORE, records);
-    restoreSaleStock({ items: entry.items || [] });
+    restoreSaleStock(entry);
     if (window.DB.flushWrites) await window.DB.flushWrites();
 
     renderClients();
@@ -258,7 +258,7 @@ function renderProducts() {
     <button class="product-card ${product.weighable ? "weighable" : ""}" data-product-id="${product.id}">
       <strong>${product.name}</strong>
       <span>${money(product.salePrice)}${product.weighable ? "/kg" : ""}</span>
-      <small>Stock: ${product.weighable ? kg(product.stock) : `${product.stock || 0}`}</small>
+      <small>Stock ${local}: ${product.weighable ? kg(product.stock) : `${product.stock || 0}`}</small>
     </button>
   `).join("");
 }
@@ -319,6 +319,7 @@ function renderCafeProducts() {
         <strong>${product.name}</strong>
         <span>${money(product.salePrice)}${product.weighable ? "/kg" : ""}</span>
         <small>${product.weighable ? "Pesable" : "Producto hecho"}</small>
+        <small>Stock ${local}: ${product.stock} ${product.weighable ? "kg" : "un."}</small>
         <button class="primary-button" type="button" data-cafe-product-id="${product.id}">Anadir</button>
       </article>
     `).join("");
@@ -450,7 +451,7 @@ function renderMiniProducts() {
       <button class="mini-product-item ${product.id === selectedMiniProductId ? "active" : ""}" type="button" data-mini-product-id="${product.id}">
         <strong>${product.name}</strong>
         <small>Venta: ${money(product.salePrice)} | Costo: ${money(product.cost)}</small>
-        <small>Stock: ${product.stock || 0} ${product.weighable ? "kg" : "un."}</small>
+        <small>Stock ${local}: ${product.stock || 0} ${product.weighable ? "kg" : "un."}</small>
         <small>Proveedor: ${product.supplier || "Otro"} | ${product.category || "Panaderia"}</small>
         <small>Codigo: ${product.barcode || "Sin codigo"}</small>
       </button>
@@ -502,7 +503,7 @@ function refreshMiniStockControls(product) {
   addButton.disabled = !isExisting;
   $("miniStockAddInput").disabled = !isExisting;
   $("miniStockHelp").textContent = isExisting
-    ? "Escribí lo que ingresó y tocá Sumar al stock."
+    ? `La mercadería ingresará a ${local}. El stock general se calcula sumando los tres locales.`
     : "Primero guardá el producto; después podrás sumar mercadería.";
 
   noStockButton.classList.toggle("hidden", local !== "Central" || !isExisting);
@@ -527,7 +528,7 @@ async function addMiniStock() {
   }
 
   try {
-    adjustProductStock(product.id, amount);
+    adjustProductStock(product.id, amount, local);
     await window.DB.flushWrites();
     loadProducts();
     selectMiniProduct(product.id);
@@ -554,12 +555,12 @@ async function markNoStockAndOrder() {
 
   const ownProduction = isOwnProduction(product);
   const question = ownProduction
-    ? "¿Confirmás que no queda stock en Central, Sucursal ni Cafetería? El stock quedará en 0."
-    : "¿Confirmás que no queda stock en Central, Sucursal ni Cafetería? El stock quedará en 0 y se agregará a la orden de compra.";
+    ? "¿Confirmás que no queda stock en Central? El stock quedará en 0."
+    : "¿Confirmás que no queda stock en Central? El stock quedará en 0 y se agregará a la orden de compra.";
   if (!confirm(question)) return;
 
   try {
-    setProductStock(product.id, 0);
+    setProductStock(product.id, 0, local, { expected: product.stock, reason: "Sin stock en el local" });
 
     if (!ownProduction) {
       const packQuantity = Math.max(0.001, Number(product.packQuantity || 1));
@@ -631,7 +632,7 @@ function selectMiniProduct(id) {
   $("miniCostInput").value = product.cost || 0;
   $("miniSaleInput").value = product.salePrice || 0;
   $("miniBarcodeInput").value = product.barcode || "";
-  $("miniStockInput").value = Math.max(0, Number(product.stock || 0));
+  $("miniStockInput").value = Number(product.stock || 0);
   $("miniStockAddInput").value = "0";
   $("miniSupplierInput").value = product.supplier || "Otro";
   $("miniCategoryInput").value = product.category || "Panaderia";
@@ -651,7 +652,7 @@ function readMiniProductForm() {
     cost,
     salePrice,
     barcode: $("miniBarcodeInput").value,
-    stock: Math.max(0, Number($("miniStockInput").value || 0)),
+    stock: 0,
     supplier: $("miniSupplierInput").value,
     category: $("miniCategoryInput").value,
     weighable: $("miniWeighableInput").checked,
@@ -753,7 +754,7 @@ function saveClientAccountSale() {
   try {
     isSavingSale = true;
     saveClientAccount(entry);
-    applySaleStock({ items: entry.items });
+    applySaleStock(entry);
     cart = [];
     loadProducts();
     renderProducts();
@@ -1093,7 +1094,7 @@ function setupEvents() {
       if (selectedMiniProductId) {
         const selected = products.find((product) => product.id === selectedMiniProductId);
         if (selected) {
-          $("miniStockInput").value = Math.max(0, Number(selected.stock || 0));
+          $("miniStockInput").value = Number(selected.stock || 0);
           refreshMiniStockControls(selected);
         }
       }
@@ -1145,10 +1146,11 @@ function setupEvents() {
   $("addMiniStockButton").addEventListener("click", addMiniStock);
   $("noStockAndOrderButton").addEventListener("click", markNoStockAndOrder);
 
-  $("miniProductForm").addEventListener("submit", (event) => {
+  $("miniProductForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
       const product = saveProduct(readMiniProductForm());
+      await window.DB.flushWrites();
       loadProducts();
       selectMiniProduct(product.id);
       renderProducts();
@@ -1306,4 +1308,3 @@ function init() {
 }
 
 init();
-

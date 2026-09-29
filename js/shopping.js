@@ -89,6 +89,7 @@ function purchaseMessageLine(entry, received) {
   const unit = item.weighable ? "kg" : "un.";
   let line = "- " + item.name + ": " + numberText(packs) + " pack" + (packs === 1 ? "" : "s");
   if (received) line += " (" + numberText(units) + " " + unit + ")";
+  if (received && item.receivedLocal) line += " → " + item.receivedLocal;
   if (supplier) line += " · " + supplier;
   return line;
 }
@@ -296,6 +297,7 @@ function openReceiveDialog(orderId, itemId) {
   if (!found || found.item.receivedAt) return;
   receiving = found;
   const item = found.item;
+  $("receivedLocalInput").value = "";
   $("receiveProductName").textContent = item.name;
   $("receiveProductInfo").textContent = "Pedido: " + numberText(item.orderedPacks) + " packs · " + numberText(item.packQuantity) + (item.weighable ? " kg" : " unidades") + " por pack";
   $("receivedPacksInput").value = Math.max(1, Number(item.orderedPacks || 1));
@@ -311,10 +313,14 @@ function updateStockPreview() {
   if (!receiving) return;
   const packs = Math.max(0, Math.floor(Number($("receivedPacksInput").value || 0)));
   const units = packs * Number(receiving.item.packQuantity || 1);
-  $("stockPreview").textContent = "Se sumarán " + numberText(units) + (receiving.item.weighable ? " kg" : " unidades") + " al stock.";
+  $("stockPreview").textContent = "Se sumarán " + numberText(units) + (receiving.item.weighable ? " kg" : " unidades") + " al stock de " + ($("receivedLocalInput").value || "el local que elijas") + ".";
 }
 
-function confirmReceived() {
+let confirmingReceipt = false;
+async function confirmReceived() {
+  if (confirmingReceipt) return;
+  const destination = $("receivedLocalInput").value;
+  if (!window.DB.STOCK_LOCALS.includes(destination)) { alert("Elegí el local que recibe la mercadería."); return; }
   if (!receiving) return;
   const packs = Math.max(0, Math.floor(Number($("receivedPacksInput").value || 0)));
   if (packs < 1) {
@@ -340,13 +346,17 @@ function confirmReceived() {
   }
 
   const units = packs * Number(latest.item.packQuantity || 1);
-  saveProduct(Object.assign({}, product, {
-    stock: Number(product.stock || 0) + units,
-  }));
+  confirmingReceipt = true;
+  try {
+  window.DB.adjustProductStock(product.id, units, destination, {
+    id: "purchase_" + latest.order.id + "_" + latest.item.id, reason: "Recepción de compra"
+  });
+  await window.DB.flushWrites();
 
   const updatedItems = latest.order.items.map(function (item) {
     if (item.id !== latest.item.id) return item;
     return Object.assign({}, item, {
+      receivedLocal: destination,
       receivedPacks: packs,
       receivedUnits: units,
       receivedAt: new Date().toISOString(),
@@ -361,9 +371,12 @@ function confirmReceived() {
     completedAt: completed ? new Date().toISOString() : null,
   }));
 
+  await window.DB.flushWrites();
   $("receiveDialog").close();
   receiving = null;
   render();
+  } catch (error) { alert(error.message || "No se pudo guardar la recepción. Podés reintentar sin duplicar el ingreso."); }
+  finally { confirmingReceipt = false; }
 }
 
 $("supplierChatList").addEventListener("click", function (event) {
@@ -385,6 +398,7 @@ $("supplierDetail").addEventListener("click", function (event) {
 $("copyPurchaseMessageButton").addEventListener("click", copyPurchaseMessage);
 $("clearPurchaseMessageButton").addEventListener("click", clearPurchaseMessage);
 $("receivedPacksInput").addEventListener("input", updateStockPreview);
+$("receivedLocalInput").addEventListener("change", updateStockPreview);
 $("cancelReceiveButton").addEventListener("click", function () {
   $("receiveDialog").close();
   receiving = null;

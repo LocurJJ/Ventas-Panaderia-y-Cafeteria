@@ -116,7 +116,13 @@
 .compact-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
+
+.product-list-panel .panel-title-row { flex-wrap: wrap; }
+.products-admin > * { min-width: 0; }
+#stockInput[readonly] { opacity: 0.85; }
+#stockHistory { max-height: 240px; overflow-y: auto; overflow-wrap: anywhere; }
 
 textarea {
   width: 100%;

@@ -125,9 +125,7 @@ function stateFor(row) {
     supplier: Object.prototype.hasOwnProperty.call(draft, "supplier")
       ? canonicalSupplier(draft.supplier)
       : canonicalSupplier(row.product.supplier),
-    stock: Object.prototype.hasOwnProperty.call(draft, "stock")
-      ? Number(draft.stock)
-      : Number(row.product.stock || 0),
+    stock: Number(row.product.stock || 0),
     orderPacks: Math.max(0, Math.floor(Number(draft.orderPacks || 0))),
   };
 }
@@ -266,7 +264,7 @@ function rowHtml(row) {
     '<td><label class="compact-field"><span class="sr-only">Cantidad por pack</span><input type="number" min="0.001" step="0.001" value="' + state.packQuantity + '" data-field="packQuantity"></label></td>' +
     '<td><label class="compact-field"><span class="sr-only">Mayorista</span><select data-field="supplier">' + supplierOptions(state.supplier) + '</select></label></td>' +
     '<td>' + numberText(row.weeklySales) + ' ' + unit + '</td>' +
-    '<td><label class="stock-field"><span class="sr-only">Stock actual</span><input class="' + (state.stock < row.weeklySales ? "low-stock-input" : "") + '" type="number" step="0.001" value="' + state.stock + '" data-field="stock"><small>' + unit + '</small></label></td>' +
+    '<td><strong>' + numberText(row.product.stock) + ' ' + unit + '</strong><small>Central: ' + numberText(row.product.stockByLocal.Central) + '<br>Sucursal: ' + numberText(row.product.stockByLocal.Sucursal) + '<br>Cafetería: ' + numberText(row.product.stockByLocal.Cafeteria) + '</small><a href="admin.html">Corregir por local</a></td>' +
     '<td>' + orderControl + '</td>' +
     '</tr>';
 }
@@ -288,7 +286,6 @@ function changedProductCount() {
     if (!row) return false;
     const draft = entry[1];
     return (Object.prototype.hasOwnProperty.call(draft, "packQuantity") && Number(draft.packQuantity) !== Number(row.product.packQuantity || 1))
-      || (Object.prototype.hasOwnProperty.call(draft, "stock") && Number(draft.stock) !== Number(row.product.stock || 0))
       || (Object.prototype.hasOwnProperty.call(draft, "supplier") && canonicalSupplier(draft.supplier) !== canonicalSupplier(row.product.supplier));
   }).length;
 }
@@ -296,7 +293,7 @@ function changedProductCount() {
 function renderSaveStatus() {
   const count = changedProductCount();
   $("catalogSaveStatus").textContent = count === 0
-    ? "Stock, mayorista y packs sin cambios."
+    ? "Mayorista y packs sin cambios. El stock se corrige por local en Administración."
     : count + (count === 1 ? " producto modificado sin guardar." : " productos modificados sin guardar.");
   $("catalogSaveStatus").classList.toggle("has-changes", count > 0);
   $("saveCatalogButton").disabled = count === 0;
@@ -348,10 +345,10 @@ function updateDraft(event) {
   const draft = draftFor(rowElement.dataset.productId);
 
   if (field === "supplier") draft.supplier = event.target.value;
-  if (field === "stock" || field === "packQuantity") draft[field] = Number(event.target.value || 0);
+  if (field === "packQuantity") draft[field] = Number(event.target.value || 0);
   if (field === "orderPacks") draft.orderPacks = Math.max(0, Math.floor(Number(event.target.value || 0)));
 
-  if (field === "stock" || field === "packQuantity") updateRowSuggestion(rowElement);
+  if (field === "packQuantity") updateRowSuggestion(rowElement);
   renderSaveStatus();
 }
 
@@ -366,30 +363,25 @@ function saveCatalogChanges(showMessage) {
     if (!row) return;
 
     const hasPack = Object.prototype.hasOwnProperty.call(draft, "packQuantity");
-    const hasStock = Object.prototype.hasOwnProperty.call(draft, "stock");
     const hasSupplier = Object.prototype.hasOwnProperty.call(draft, "supplier");
-    if (!hasPack && !hasStock && !hasSupplier) return;
+    if (!hasPack && !hasSupplier) return;
 
     const product = row.product;
     const packQuantity = hasPack ? Math.max(0.001, Number(draft.packQuantity || 1)) : Number(product.packQuantity || 1);
-    const stock = hasStock ? Number(draft.stock || 0) : Number(product.stock || 0);
     const supplier = hasSupplier ? canonicalSupplier(draft.supplier) : canonicalSupplier(product.supplier);
     const isChanged = packQuantity !== Number(product.packQuantity || 1)
-      || stock !== Number(product.stock || 0)
       || supplier !== canonicalSupplier(product.supplier);
 
     if (isChanged) {
       saveProduct(Object.assign({}, product, {
         packQuantity: packQuantity,
         supplier: supplier,
-        stock: stock,
       }));
       changed.push(product.id);
     }
 
     delete draft.packQuantity;
     delete draft.supplier;
-    delete draft.stock;
     if (!Object.keys(draft).length) draftByProduct.delete(productId);
   });
 

@@ -74,6 +74,7 @@ function rememberPending(promise, label) {
       throw error;
     })
     .finally(() => pendingWrites.delete(trackedPromise));
+  trackedPromise.catch(() => {});
   pendingWrites.add(trackedPromise);
   return trackedPromise;
 }
@@ -308,68 +309,127 @@ function normalizeProduct(rawProduct) {
   };
 }
 
-function saveProduct(rawProduct) {
-  const product = normalizeProduct(rawProduct);
-  if (!product.name) {
-    throw new Error("Falta el nombre del producto.");
-  }
-  return upsertById("productsById", product);
+// Stock is maintained per location. The legacy total is a derived compatibility field.
+const STOCK_LOCALS = ["Central", "Sucursal", "Cafeteria"];
+function stockNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error("La cantidad de stock no es válida.");
+  return Math.round(number * 1000) / 1000;
 }
-
-
-function changeProductStock(productId, value, mode) {
+function stockByLocal(product) {
+  const source = product?.stockByLocal;
+  return Object.fromEntries(STOCK_LOCALS.map((local) => [local,
+    stockNumber(source ? (source[local] ?? 0) : (local === "Central" ? (product?.stock || 0) : 0))]));
+}
+function totalStock(product) {
+  return stockNumber(Object.values(stockByLocal(product)).reduce((sum, n) => sum + n, 0));
+}
+function productStock(product, local) {
+  if (!STOCK_LOCALS.includes(local)) throw new Error("Seleccioná un local válido.");
+  return stockByLocal(product)[local];
+}
+function withStock(product) {
+  const quantities = stockByLocal(product);
+  return { ...product, stockByLocal: quantities, stock: totalStock(product),
+    legacyStock: product.legacyStock ?? (product.stockByLocal ? null : Number(product.stock || 0)),
+    stockAllocationPending: product.stockAllocationPending ?? !product.stockByLocal };
+}
+function updateProductTransaction(id, transform) {
   const records = readStore("productsById", {});
-  const currentProduct = records[productId];
-  if (!currentProduct) throw new Error("No se encontró el producto.");
-
-  const amount = Number(value || 0);
-  const calculateStock = (currentStock) => mode === "set"
-    ? Math.max(0, amount)
-    : Math.max(0, Number(currentStock || 0) + amount);
-
-  records[productId] = {
-    ...currentProduct,
-    stock: calculateStock(currentProduct.stock),
-    updatedAt: new Date().toISOString(),
-  };
+  const previous = records[id];
+  const next = transform(previous || null);
+  if (!next) throw new Error("El stock cambió en otra computadora. Volvé a abrir el producto y revisá las cantidades.");
+  records[id] = next;
   saveLocalStore("productsById", records);
   dispatchStoreChange("productsById");
-
-  const productRef = remoteRef("productsById")?.child(productId);
-  if (productRef) {
-    const transaction = productRef.transaction((remoteProduct) => {
-      const source = remoteProduct || currentProduct;
-      return {
-        ...source,
-        stock: calculateStock(source.stock),
-        updatedAt: new Date().toISOString(),
-      };
-    }).then((result) => {
-      if (!result.committed) return;
+  const ref = remoteRef("productsById")?.child(id);
+  if (ref) {
+    // Never replace another location's quantities with a stale browser copy.
+    const promise = ref.transaction((current) => transform(current), undefined, false).then((result) => {
       const latest = readStore("productsById", {});
-      latest[productId] = result.snapshot.val();
+      if (result.snapshot.val()) latest[id] = result.snapshot.val();
+      else delete latest[id];
       saveLocalStore("productsById", latest);
       dispatchStoreChange("productsById");
+      if (!result.committed) throw new Error("El producto o su stock cambió. Actualizá antes de guardar otra vez.");
+    }).catch((error) => {
+      const latest = readStore("productsById", {});
+      if (latest[id] === next) {
+        if (previous) latest[id] = previous; else delete latest[id];
+        saveLocalStore("productsById", latest);
+        dispatchStoreChange("productsById");
+      }
+      throw error;
     });
-    rememberPending(transaction, `productsById/${productId}/stock`);
+    rememberPending(promise, `productsById/${id}/stock`);
   }
-
-  return records[productId];
+  return withStock(next);
 }
-
-function adjustProductStock(productId, delta) {
-  return changeProductStock(productId, delta, "adjust");
+function saveProduct(rawProduct) {
+  const product = normalizeProduct(rawProduct);
+  if (!product.name) throw new Error("Falta el nombre del producto.");
+  const existing = readStore("productsById", {})[product.id];
+  const initial = rawProduct.stockByLocal || { Central: product.stock, Sucursal: 0, Cafeteria: 0 };
+  return updateProductTransaction(product.id, (current) => {
+    if (!current && existing) return;
+    const source = current || { ...product, stockByLocal: initial, stockAllocationPending: false };
+    return { ...withStock(source), ...product, stockByLocal: stockByLocal(source),
+      stock: totalStock(source), updatedAt: new Date().toISOString() };
+  });
 }
-
-function setProductStock(productId, stock) {
-  return changeProductStock(productId, stock, "set");
+function changeProductStock(productId, value, mode, local, options = {}) {
+  if (!STOCK_LOCALS.includes(local)) throw new Error("Indicá a qué local pertenece el stock.");
+  const amount = stockNumber(value);
+  const operationId = options.id || createId("stock");
+  const date = new Date().toISOString();
+  return updateProductTransaction(productId, (current) => {
+    if (!current) return;
+    const applied = current.stockMovements?.[operationId];
+    if (applied) {
+      if (applied.local !== local || (mode === "adjust" && applied.delta !== amount)) {
+        throw new Error("Este ingreso ya fue registrado con otra cantidad o local. Revisá el historial del producto.");
+      }
+      return current;
+    }
+    const source = withStock(current);
+    const quantities = stockByLocal(source);
+    if (mode === "set" && options.expected !== undefined && quantities[local] !== options.expected) return;
+    const before = quantities[local];
+    quantities[local] = stockNumber(mode === "set" ? amount : before + amount);
+    return { ...source, stockByLocal: quantities, stock: totalStock({stockByLocal: quantities}), updatedAt: date,
+      legacyStock: current.legacyStock ?? (current.stockByLocal ? null : Number(current.stock || 0)),
+      stockMovements: { ...(current.stockMovements || {}), [operationId]: {
+        id: operationId, local, date, before, after: quantities[local], delta: stockNumber(quantities[local] - before),
+        reason: options.reason || (mode === "set" ? "Corrección" : "Entrada de mercadería")
+      } }
+    };
+  });
 }
-
+function adjustProductStock(productId, delta, local, options) {
+  return changeProductStock(productId, delta, "adjust", local, options);
+}
+function setProductStock(productId, stock, local, options) {
+  return changeProductStock(productId, stock, "set", local, options);
+}
+function setProductStocks(productId, quantities, expected, reason = "Conteo por local") {
+  const desired = stockByLocal({stockByLocal: quantities});
+  const id = createId("count");
+  const date = new Date().toISOString();
+  return updateProductTransaction(productId, (current) => {
+    if (!current) return;
+    if (current.stockMovements?.[id]) return current;
+    const before = stockByLocal(current);
+    if (expected && STOCK_LOCALS.some(local => before[local] !== expected[local])) return;
+    return { ...current, stockByLocal: desired, stock: totalStock({stockByLocal: desired}),
+      stockAllocationPending: false, updatedAt: date,
+      legacyStock: current.legacyStock ?? (current.stockByLocal ? null : Number(current.stock || 0)),
+      stockMovements: { ...(current.stockMovements || {}), [id]: {id, date, reason, before, after: desired} }
+    };
+  });
+}
 function listProducts() {
   seedProductsIfEmpty();
-  return listByStore("productsById")
-    .map((product) => ({ ...product, stock: Math.max(0, Number(product.stock || 0)) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return listByStore("productsById").map(withStock).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function initRemoteSync() {
@@ -407,6 +467,11 @@ async function flushWrites() {
 }
 
 window.DB = {
+  STOCK_LOCALS,
+  stockByLocal,
+  productStock,
+  totalStock,
+  setProductStocks,
   addShiftMovement,
   adjustProductStock,
   createId,
