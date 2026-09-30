@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orden de compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/purchases.css?v=20260914-row-order">
+  <link rel="stylesheet" href="css/purchases.css?v=20260929-orders-local">
 </head>
 <body>
   <main class="page-shell purchase-page">
@@ -13,7 +13,7 @@
       <div>
         <p class="eyebrow">Compras · PC</p>
         <h1>Orden de compra</h1>
-        <p class="muted">Los más vendidos, búsqueda general y sugerencias según el stock.</p>
+        <p class="muted">Elegí el local para preparar su pedido y revisar su stock.</p>
       </div>
       <nav class="top-actions">
         <a class="secondary-button" href="lista-compra.html">Abrir Compra</a>
@@ -21,13 +21,20 @@
       </nav>
     </header>
 
+    <nav class="local-selector" aria-label="Local de la orden de compra">
+      <button type="button" data-order-local="Central">Orden de compra <strong>CENTRAL</strong></button>
+      <button type="button" data-order-local="Sucursal">Orden de compra <strong>SUCURSAL</strong></button>
+      <button type="button" data-order-local="Cafeteria">Orden de compra <strong>CAFETERÍA</strong></button>
+    </nav>
+    <p id="chooseLocalNotice" class="purchase-notice">Elegí una de las tres opciones para comenzar.</p>
+    <div id="orderWorkspace" class="hidden">
     <section class="purchase-summary" id="orderSummary"></section>
 
     <section class="panel order-panel">
       <div class="order-toolbar">
         <div>
-          <h2 id="catalogTitle">Lo más importante</h2>
-          <p class="muted" id="catalogDescription">Los 25 productos más vendidos de todo el historial. Elaboración propia no se incluye.</p>
+          <h2 id="catalogTitle">Pedido del local</h2>
+          <p class="muted" id="catalogDescription">Todos los productos del catálogo.</p>
         </div>
         <div class="compact-actions">
           <button class="secondary-button" id="saveCatalogButton" type="button">Guardar datos</button>
@@ -37,18 +44,13 @@
 
       <div class="purchase-notice">
         <strong>Cómo se calcula</strong>
-        <span>La sugerencia cubre una semana de ventas entre Central, Sucursal y Cafetería, descontando el stock actual.</span>
+        <span>La sugerencia cubre las ventas de los últimos 7 días del local elegido, descontando su propio stock y redondeando a packs completos.</span>
       </div>
 
       <label class="catalog-search">
         <span>Buscar un producto para pedir</span>
         <input id="catalogSearchInput" type="search" placeholder="Nombre, código o mayorista..." autocomplete="off">
       </label>
-
-      <div class="catalog-tabs" role="tablist" aria-label="Productos para la orden">
-        <button class="catalog-tab active" id="importantTab" type="button" role="tab" aria-selected="true" data-catalog-view="important">Lo más importante <span id="importantCount">0</span></button>
-        <button class="catalog-tab" id="generalTab" type="button" role="tab" aria-selected="false" data-catalog-view="general">General <span id="generalCount">0</span></button>
-      </div>
 
       <div class="order-table-wrap">
         <table class="order-table">
@@ -58,7 +60,7 @@
               <th>Cantidad por pack</th>
               <th>Mayorista</th>
               <th>Venta semanal</th>
-              <th>Stock general / por local</th>
+              <th id="stockColumnTitle">Stock del local</th>
               <th>Orden</th>
             </tr>
           </thead>
@@ -71,7 +73,7 @@
         <span id="suggestionEmptyText">Cuando haya ventas de los últimos 7 días aparecerán aquí.</span>
       </div>
 
-      <nav class="catalog-pagination hidden" id="catalogPagination" aria-label="Páginas de productos">
+      <nav class="catalog-pagination" id="catalogPagination" aria-label="Páginas de productos">
         <span>Página</span>
         <input id="catalogPageInput" type="number" min="1" value="1" aria-label="Número de página">
         <span>de <strong id="catalogTotalPages">1</strong> páginas</span>
@@ -79,7 +81,7 @@
         <button class="pagination-button" id="nextCatalogPage" type="button" aria-label="Página siguiente">›</button>
       </nav>
 
-      <div class="catalog-save-status" id="catalogSaveStatus">Stock, mayorista y packs sin cambios.</div>
+      <div class="catalog-save-status" id="catalogSaveStatus"></div>
 
       <p class="row-order-help">Usá el botón <strong>Ordenar</strong> de cada producto. Los productos en naranja ya están pendientes de compra.</p>
     </section>
@@ -87,19 +89,21 @@
     <section class="panel active-orders-panel">
       <div class="order-toolbar">
         <div>
-          <h2>Órdenes activas</h2>
+          <h2>Pedido pendiente</h2>
           <p class="muted">Pedidos que todavía tienen productos pendientes de compra.</p>
         </div>
       </div>
-      <div class="active-order-list" id="activeOrderList"></div>
+      <p id="legacyOrderNotice" class="muted hidden">Los pedidos anteriores sin local registrado se muestran en Central.</p><div class="active-order-list" id="activeOrderList"></div>
     </section>
+    </div>
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script>window.PANADERIA_SYNC_STORES = ["productsById", "salesById", "purchaseOrdersById"];</script>
-  <script src="js/db.js?v=20260929-stock-local"></script>
-  <script src="js/purchase-order.js?v=20260929-stock-local"></script>
+  <script src="js/db.js?v=20260929-orders-local"></script>
+  <script src="js/purchase-utils.js?v=20260929-orders-local"></script>
+  <script src="js/purchase-order.js?v=20260929-orders-local"></script>
 </body>
 </html>

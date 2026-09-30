@@ -460,6 +460,31 @@ function initRemoteSync() {
   });
 }
 
+function updatePurchaseOrder(id, transform) {
+  const records = readStore("purchaseOrdersById", {});
+  const previous = records[id];
+  const next = transform(previous || null);
+  if (!next) throw new Error("El pedido cambió. Actualizá e intentá nuevamente.");
+  records[id] = next;
+  saveLocalStore("purchaseOrdersById", records);
+  dispatchStoreChange("purchaseOrdersById");
+  const ref = remoteRef("purchaseOrdersById")?.child(id);
+  if (ref) rememberPending(ref.transaction(transform, undefined, false).then(result => {
+    const latest = readStore("purchaseOrdersById", {});
+    if(result.snapshot.val()) latest[id] = result.snapshot.val(); else delete latest[id];
+    saveLocalStore("purchaseOrdersById", latest);dispatchStoreChange("purchaseOrdersById");
+    if(!result.committed)throw new Error("El pedido cambió. Actualizá e intentá nuevamente.");
+  }).catch(error => {
+    const latest = readStore("purchaseOrdersById", {});
+    if(latest[id] === next) {
+      if(previous)latest[id]=previous;else delete latest[id];
+      saveLocalStore("purchaseOrdersById",latest);dispatchStoreChange("purchaseOrdersById");
+    }
+    throw error;
+  }), "purchaseOrdersById/" + id);
+  return next;
+}
+
 async function flushWrites() {
   const writes = Array.from(pendingWrites);
   if (writes.length === 0) return;
@@ -467,6 +492,7 @@ async function flushWrites() {
 }
 
 window.DB = {
+  updatePurchaseOrder,
   STOCK_LOCALS,
   stockByLocal,
   productStock,

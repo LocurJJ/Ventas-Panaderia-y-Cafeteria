@@ -1,14 +1,9 @@
-const {
-  listByStore,
-  listProducts,
-  saveProduct,
-  upsertById,
-} = window.DB;
-
-const $ = (id) => document.getElementById(id);
-let selectedGroupKey = "";
-let receiving = null;
-
+const { listByStore, listProducts } = window.DB;
+const { LOCALS, label, remaining, localOf, entries, aggregate } = window.Purchases;
+const $ = id => document.getElementById(id);
+let selectedLocal = new URLSearchParams(location.search).get('local') || 'General';
+if(!['General',...LOCALS].includes(selectedLocal))selectedLocal='General';
+let selectedGroupKey='', receiving=null, confirmingReceipt=false;
 function escapeHtml(value) {
   return String(value == null ? "" : value)
     .replaceAll("&", "&amp;")
@@ -66,355 +61,154 @@ function canonicalSupplier(value) {
 }
 
 
-function purchaseMessageEntries() {
-  return listByStore("purchaseOrdersById")
-    .flatMap(function (order) {
-      return (order.items || []).map(function (item) {
-        return { order: order, item: item };
-      });
-    })
-    .filter(function (entry) {
-      return !entry.item.messageClearedAt;
-    })
-    .sort(function (a, b) {
-      return new Date(a.order.createdAt || 0) - new Date(b.order.createdAt || 0);
-    });
-}
-
-function purchaseMessageLine(entry, received) {
-  const item = entry.item;
-  const supplier = canonicalSupplier(item.supplier);
-  const packs = received ? Number(item.receivedPacks || 0) : Number(item.orderedPacks || 0);
-  const units = received ? Number(item.receivedUnits || 0) : packs * Number(item.packQuantity || 1);
-  const unit = item.weighable ? "kg" : "un.";
-  let line = "- " + item.name + ": " + numberText(packs) + " pack" + (packs === 1 ? "" : "s");
-  if (received) line += " (" + numberText(units) + " " + unit + ")";
-  if (received && item.receivedLocal) line += " → " + item.receivedLocal;
-  if (supplier) line += " · " + supplier;
-  return line;
-}
-
-function buildPurchaseMessage() {
-  const entries = purchaseMessageEntries();
-  if (!entries.length) return "";
-
-  const received = entries.filter(function (entry) { return !!entry.item.receivedAt; });
-  const pending = entries.filter(function (entry) { return !entry.item.receivedAt; });
-  const lines = ["Se consiguió:"];
-
-  if (received.length) {
-    received.forEach(function (entry) {
-      lines.push(purchaseMessageLine(entry, true));
-    });
-  } else {
-    lines.push("- Nada todavía");
-  }
-
-  lines.push("", "Pendiente:");
-  if (pending.length) {
-    pending.forEach(function (entry) {
-      lines.push(purchaseMessageLine(entry, false));
-    });
-  } else {
-    lines.push("- Nada");
-  }
-
-  return lines.join("\n");
-}
-
-function renderPurchaseMessage() {
-  const message = buildPurchaseMessage();
-  $("purchaseMessage").value = message;
-  $("copyPurchaseMessageButton").disabled = !message;
-  $("clearPurchaseMessageButton").disabled = !message;
-}
-
-async function copyPurchaseMessage() {
-  const message = buildPurchaseMessage();
-  if (!message) return;
-
-  try {
-    await navigator.clipboard.writeText(message);
-  } catch (error) {
-    const textarea = $("purchaseMessage");
-    textarea.focus();
-    textarea.select();
-    if (!document.execCommand("copy")) {
-      alert("No se pudo copiar automáticamente. Mantené apretado el texto y elegí Copiar.");
-      return;
-    }
-  }
-
-  alert("Mensaje copiado. Ya podés pegarlo en WhatsApp.");
-}
-
-function clearPurchaseMessage() {
-  const entries = purchaseMessageEntries();
-  if (!entries.length) return;
-  if (!confirm("¿Limpiar este resumen? No se borrarán el stock ni los pedidos.")) return;
-
-  const clearedAt = new Date().toISOString();
-  const orderIds = new Set(entries.map(function (entry) { return entry.order.id; }));
-
-  listByStore("purchaseOrdersById").forEach(function (order) {
-    if (!orderIds.has(order.id)) return;
-    const updatedItems = (order.items || []).map(function (item) {
-      if (item.messageClearedAt) return item;
-      return Object.assign({}, item, { messageClearedAt: clearedAt });
-    });
-    upsertById("purchaseOrdersById", Object.assign({}, order, { items: updatedItems }));
-  });
-
-  render();
-}
-
-function activeOrders() {
-  return listByStore("purchaseOrdersById")
-    .filter(function (order) {
-      return order.status !== "completed" && (order.items || []).some(function (item) {
-        return !item.receivedAt;
-      });
-    })
-    .sort(function (a, b) {
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    });
-}
 
 function supplierGroups() {
-  const grouped = new Map();
-
-  activeOrders().forEach(function (order) {
-    (order.items || []).forEach(function (item) {
-      const supplier = canonicalSupplier(item.supplier);
-      const key = normalizedSupplier(supplier);
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          key: key,
-          supplier: supplier,
-          entries: [],
-        });
-      }
-      grouped.get(key).entries.push({ order: order, item: item });
-    });
+  const grouped=new Map();
+  entries(listByStore('purchaseOrdersById'),selectedLocal).forEach(entry=>{
+    const supplier=canonicalSupplier(entry.item.supplier),key=normalizedSupplier(supplier);
+    if(!grouped.has(key))grouped.set(key,{key,supplier,entries:[]});
+    grouped.get(key).entries.push(entry);
   });
-
-  return Array.from(grouped.values())
-    .map(function (group) {
-      group.pendingEntries = group.entries.filter(function (entry) {
-        return !entry.item.receivedAt;
-      });
-      group.orderCount = new Set(group.pendingEntries.map(function (entry) {
-        return entry.order.id;
-      })).size;
-      return group;
-    })
-    .filter(function (group) {
-      return group.pendingEntries.length > 0;
-    })
-    .sort(function (a, b) {
-      return a.supplier.localeCompare(b.supplier, "es-AR");
+  return Array.from(grouped.values()).map(group=>({...group,rows:aggregate(group.entries)}))
+    .sort((a,b)=>a.supplier.localeCompare(b.supplier,'es-AR'));
+}
+function selectedGroup() { return supplierGroups().find(group=>group.key===selectedGroupKey); }
+function breakdown(row) {
+  return LOCALS.filter(local=>row.byLocal[local]>0).map(local=>`${label(local)}: ${numberText(row.byLocal[local])}`).join(' · ');
+}
+function purchaseLine(row) {
+  return `- ${row.name}: ${numberText(row.packs)} packs (${numberText(row.packQuantity)} ${row.weighable?'kg':'un.'} por pack)`;
+}
+function buildPurchaseMessage() {
+  const group=selectedGroup();if(!group)return '';
+  const lines=[`Pedido a ${group.supplier}`];
+  for(const local of LOCALS) {
+    const ownEntries=group.entries.filter(entry=>entry.local===local);
+    if(!ownEntries.length)continue;
+    lines.push('',`${label(local)} pidió:`);
+    aggregate(ownEntries).forEach(row=>{
+      lines.push(purchaseLine(row));
+      if(row.entries.some(entry=>entry.item.unavailableAt))lines.push('  No se consiguió todavía: '+numberText(row.entries.filter(e=>e.item.unavailableAt).reduce((n,e)=>n+remaining(e.item),0))+' packs.');
     });
-}
-
-function renderStatus(groups) {
-  const pendingProducts = groups.reduce(function (sum, group) {
-    return sum + group.pendingEntries.length;
-  }, 0);
-  const suppliers = new Set(groups.map(function (group) { return group.supplier; }));
-
-  $("pendingBadge").textContent = pendingProducts;
-  $("shoppingStatus").innerHTML =
-    '<article><strong>' + suppliers.size + '</strong><span>mayoristas pendientes</span></article>' +
-    '<article><strong>' + pendingProducts + '</strong><span>productos por conseguir</span></article>';
-}
-
-function renderInbox(groups) {
-  $("supplierChatList").innerHTML = groups.length === 0
-    ? '<div class="empty-purchase compact-empty"><strong>Todo comprado</strong><span>No hay productos pendientes.</span></div>'
-    : groups.map(function (group) {
-        const active = group.key === selectedGroupKey ? " active" : "";
-        const orderText = group.orderCount === 1 ? "1 orden activa" : group.orderCount + " órdenes reunidas";
-        return '<button class="supplier-chat' + active + '" type="button" data-group-key="' + escapeHtml(group.key) + '">' +
-          '<span class="supplier-avatar">' + escapeHtml(group.supplier.charAt(0).toUpperCase()) + '</span>' +
-          '<span class="supplier-chat-copy"><strong>' + escapeHtml(group.supplier) + '</strong><small>' + orderText + '</small><span>' + group.pendingEntries.length + (group.pendingEntries.length === 1 ? " producto pendiente" : " productos pendientes") + '</span></span>' +
-          '<span class="notification-badge">' + group.pendingEntries.length + '</span>' +
-          '</button>';
-      }).join("");
-}
-
-function renderDetail(groups) {
-  const group = groups.find(function (item) { return item.key === selectedGroupKey; });
-  if (!group) {
-    selectedGroupKey = groups.length ? groups[0].key : "";
   }
-  const selected = groups.find(function (item) { return item.key === selectedGroupKey; });
-
-  if (!selected) {
-    $("supplierDetail").innerHTML = '<div class="empty-purchase"><strong>No hay compras pendientes.</strong><span>Una nueva orden preparada desde la PC aparecerá acá.</span></div>';
-    return;
+  if(selectedLocal==='General') {
+    lines.push('','Total a comprar:');group.rows.forEach(row=>lines.push(purchaseLine(row)));
   }
-
-  const orderText = selected.orderCount === 1 ? "1 orden activa" : selected.orderCount + " órdenes reunidas";
-  $("supplierDetail").innerHTML =
-    '<header class="supplier-detail-head"><div><p class="eyebrow">Mayorista</p><h2>' + escapeHtml(selected.supplier) + '</h2><span>' + orderText + '</span></div><span class="notification-badge">' + selected.pendingEntries.length + '</span></header>' +
-    '<div class="shopping-item-list">' +
-      selected.pendingEntries.map(function (entry) {
-        const item = entry.item;
-        const received = !!item.receivedAt;
-        const unit = item.weighable ? "kg" : "un.";
-        const detail = received
-          ? 'Comprado: ' + numberText(item.receivedPacks) + ' packs · +' + numberText(item.receivedUnits) + ' ' + unit + ' al stock'
-          : 'Pedido: ' + numberText(item.orderedPacks) + ' packs · ' + numberText(item.packQuantity) + ' ' + unit + ' por pack';
-        return '<button class="shopping-item' + (received ? " received" : "") + '" type="button" data-order-id="' + escapeHtml(entry.order.id) + '" data-item-id="' + escapeHtml(item.id) + '"' + (received ? " disabled" : "") + '>' +
-          '<span class="item-check">' + (received ? "✓" : "") + '</span>' +
-          '<span class="shopping-item-copy"><strong>' + escapeHtml(item.name) + '</strong><span>' + detail + '</span>' +
-          (received ? '<small>Confirmado ' + dateText(item.receivedAt) + '</small>' : '<small>Tocá para confirmar la cantidad conseguida</small>') +
-          '</span></button>';
-      }).join("") +
-    '</div>';
+  return lines.join('\n');
 }
-
+async function copyPurchaseMessage() {
+  const message=buildPurchaseMessage();if(!message)return;
+  try {await navigator.clipboard.writeText(message);}
+  catch(error) {
+    $('purchaseMessage').focus();$('purchaseMessage').select();
+    if(!document.execCommand('copy')) {alert('Seleccioná el texto y copialo para pegarlo en WhatsApp.');return;}
+  }
+  const button=$('copyPurchaseMessageButton');button.textContent='Copiado';
+  setTimeout(()=>{button.textContent='Copiar para WhatsApp';},1500);
+}
 function render() {
-  const groups = supplierGroups();
-  renderStatus(groups);
-  renderPurchaseMessage();
-  renderInbox(groups);
-  renderDetail(groups);
-}
-
-function findOrderAndItem(orderId, itemId) {
-  const order = listByStore("purchaseOrdersById").find(function (entry) {
-    return entry.id === orderId;
+  const groups=supplierGroups();
+  if(!groups.some(group=>group.key===selectedGroupKey))selectedGroupKey=groups[0]?.key||'';
+  document.querySelectorAll('[data-shopping-local]').forEach(button=>{
+    const active=button.dataset.shoppingLocal===selectedLocal;
+    button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
   });
-  const item = order && (order.items || []).find(function (entry) {
-    return entry.id === itemId;
-  });
-  return order && item ? { order: order, item: item } : null;
+  const count=groups.reduce((n,group)=>n+group.rows.length,0),packs=groups.reduce((n,group)=>n+group.rows.reduce((sum,row)=>sum+row.packs,0),0);
+  $('pendingBadge').textContent=count;
+  $('shoppingStatus').innerHTML=`<article><strong>${label(selectedLocal)}</strong><span>${selectedLocal==='General'?'Todos los locales':'Pedido del local'}</span></article><article><strong>${numberText(packs)}</strong><span>packs pendientes · ${groups.length} mayoristas</span></article>`;
+  $('supplierChatList').innerHTML=groups.length?groups.map(group=>`<button class="supplier-chat${group.key===selectedGroupKey?' active':''}" type="button" data-group-key="${escapeHtml(group.key)}"><span class="supplier-avatar">${escapeHtml(group.supplier.charAt(0).toUpperCase())}</span><span class="supplier-chat-copy"><strong>${escapeHtml(group.supplier)}</strong><small>${group.rows.length} productos pendientes</small><span>${numberText(group.rows.reduce((n,row)=>n+row.packs,0))} packs</span></span><span class="notification-badge">${group.rows.length}</span></button>`).join(''):'<div class="empty-purchase compact-empty"><strong>Sin pedidos pendientes</strong><span>No hay compras para esta vista.</span></div>';
+  const group=groups.find(group=>group.key===selectedGroupKey);
+  $('supplierDetail').innerHTML=group?`<header class="supplier-detail-head"><div><p class="eyebrow">Mayorista · ${label(selectedLocal)}</p><h2>${escapeHtml(group.supplier)}</h2><span>${group.rows.length} productos por conseguir</span></div></header><div class="shopping-item-list">${group.rows.map((row,index)=>{
+    const unavailable=row.entries.every(entry=>entry.item.unavailableAt);
+    return `<div class="purchase-row"><button class="shopping-item" type="button" data-receive-row="${index}"><span class="item-check">${unavailable?'×':''}</span><span class="shopping-item-copy"><strong>${escapeHtml(row.name)}</strong><span>Total a comprar: ${numberText(row.packs)} packs · ${numberText(row.packQuantity)} ${row.weighable?'kg':'un.'} por pack</span><small>${breakdown(row)}</small><small>${unavailable?'No se consiguió. Tocá para confirmar si ahora está disponible.':'Tocá para confirmar lo recibido por cada local.'}</small></span></button><button class="unavailable-button" type="button" data-unavailable-row="${index}">${unavailable?'Volver a pendiente':'× No se consiguió'}</button></div>`;
+  }).join('')}</div>`:'<div class="empty-purchase"><strong>No hay compras pendientes.</strong><span>Los pedidos de cada local aparecerán acá.</span></div>';
+  $('purchaseMessageTitle').textContent=group?`${selectedLocal==='General'?'Pedidos por local':label(selectedLocal)+' pidió'} · ${group.supplier}`:'Mensaje para WhatsApp';
+  $('purchaseMessage').value=buildPurchaseMessage();$('copyPurchaseMessageButton').disabled=!group;
+  $('shoppingLegacyNotice').classList.toggle('hidden',!group?.entries.some(entry=>!entry.order.local&&!entry.item.local));
 }
-
-function openReceiveDialog(orderId, itemId) {
-  const found = findOrderAndItem(orderId, itemId);
-  if (!found || found.item.receivedAt) return;
-  receiving = found;
-  const item = found.item;
-  $("receivedLocalInput").value = "";
-  $("receiveProductName").textContent = item.name;
-  $("receiveProductInfo").textContent = "Pedido: " + numberText(item.orderedPacks) + " packs · " + numberText(item.packQuantity) + (item.weighable ? " kg" : " unidades") + " por pack";
-  $("receivedPacksInput").value = Math.max(1, Number(item.orderedPacks || 1));
-  updateStockPreview();
-  $("receiveDialog").showModal();
-  setTimeout(function () {
-    $("receivedPacksInput").focus();
-    $("receivedPacksInput").select();
-  }, 50);
+function findEntry(orderId,itemId) {
+  const order=listByStore('purchaseOrdersById').find(order=>order.id===orderId);
+  const item=order?.items?.find(item=>item.id===itemId);
+  return item?{order,item,local:localOf(order,item)}:null;
 }
-
+function openReceiveDialog(index) {
+  const row=selectedGroup()?.rows[index];if(!row)return;
+  receiving={...row,plan:null};
+  $('receiveProductName').textContent=row.name;
+  $('receiveProductInfo').textContent=`${numberText(row.packs)} packs pendientes · ${numberText(row.packQuantity)} ${row.weighable?'kg':'unidades'} por pack`;
+  $('receiveAllocations').innerHTML=row.entries.map((entry,index)=>`<label>Packs para ${label(entry.local)} <small>(${numberText(remaining(entry.item))} pendientes)</small><input type="number" data-receive-index="${index}" min="0" max="${remaining(entry.item)}" step="1" value="${remaining(entry.item)}" required inputmode="numeric"></label>`).join('');
+  $('confirmReceiveButton').disabled=false;updateStockPreview();$('receiveDialog').showModal();
+}
 function updateStockPreview() {
-  if (!receiving) return;
-  const packs = Math.max(0, Math.floor(Number($("receivedPacksInput").value || 0)));
-  const units = packs * Number(receiving.item.packQuantity || 1);
-  $("stockPreview").textContent = "Se sumarán " + numberText(units) + (receiving.item.weighable ? " kg" : " unidades") + " al stock de " + ($("receivedLocalInput").value || "el local que elijas") + ".";
+  if(!receiving)return;
+  const totals={Central:0,Sucursal:0,Cafeteria:0};
+  document.querySelectorAll('[data-receive-index]').forEach(input=>{const entry=receiving.entries[Number(input.dataset.receiveIndex)];totals[entry.local]+=Number(input.value||0)*receiving.packQuantity;});
+  $('stockPreview').textContent=LOCALS.filter(local=>totals[local]>0).map(local=>`${label(local)}: +${numberText(totals[local])} ${receiving.weighable?'kg':'unidades'}`).join(' · ') || 'Poné 0 para dejar un local pendiente. Se suma únicamente lo recibido.';
 }
-
-let confirmingReceipt = false;
 async function confirmReceived() {
-  if (confirmingReceipt) return;
-  const destination = $("receivedLocalInput").value;
-  if (!window.DB.STOCK_LOCALS.includes(destination)) { alert("Elegí el local que recibe la mercadería."); return; }
-  if (!receiving) return;
-  const packs = Math.max(0, Math.floor(Number($("receivedPacksInput").value || 0)));
-  if (packs < 1) {
-    alert("Ingresá al menos 1 pack. Si no lo conseguiste, dejalo pendiente.");
-    return;
-  }
-
-  const latest = findOrderAndItem(receiving.order.id, receiving.item.id);
-  if (!latest || latest.item.receivedAt) {
-    $("receiveDialog").close();
-    receiving = null;
-    render();
-    return;
-  }
-
-  const products = listProducts();
-  const product = products.find(function (entry) {
-    return entry.id === latest.item.productId;
-  });
-  if (!product) {
-    alert("No encontré el producto en el stock. No se realizó ningún cambio.");
-    return;
-  }
-
-  const units = packs * Number(latest.item.packQuantity || 1);
-  confirmingReceipt = true;
+  if(!receiving||confirmingReceipt)return;
   try {
-  window.DB.adjustProductStock(product.id, units, destination, {
-    id: "purchase_" + latest.order.id + "_" + latest.item.id, reason: "Recepción de compra"
-  });
-  await window.DB.flushWrites();
-
-  const updatedItems = latest.order.items.map(function (item) {
-    if (item.id !== latest.item.id) return item;
-    return Object.assign({}, item, {
-      receivedLocal: destination,
-      receivedPacks: packs,
-      receivedUnits: units,
-      receivedAt: new Date().toISOString(),
-      messageClearedAt: null,
-    });
-  });
-  const completed = updatedItems.every(function (item) { return !!item.receivedAt; });
-
-  upsertById("purchaseOrdersById", Object.assign({}, latest.order, {
-    items: updatedItems,
-    status: completed ? "completed" : "active",
-    completedAt: completed ? new Date().toISOString() : null,
-  }));
-
-  await window.DB.flushWrites();
-  $("receiveDialog").close();
-  receiving = null;
-  render();
-  } catch (error) { alert(error.message || "No se pudo guardar la recepción. Podés reintentar sin duplicar el ingreso."); }
-  finally { confirmingReceipt = false; }
+    if(!receiving.plan) {
+      const plan=Array.from(document.querySelectorAll('[data-receive-index]')).map(input=>{
+        const entry=receiving.entries[Number(input.dataset.receiveIndex)],packs=Number(input.value||0);
+        if(!Number.isSafeInteger(packs)||packs<0||packs>remaining(entry.item))throw Error('Revisá los packs: deben ser enteros, entre 0 y lo pendiente.');
+        return {...entry,packs,before:Number(entry.item.receivedPacks||0),operationId:`purchase_${entry.order.id}_${entry.item.id}_${Number(entry.item.receivedPacks||0)}`};
+      }).filter(entry=>entry.packs>0);
+      if(!plan.length)throw Error('Ingresá al menos un pack recibido. Los demás pueden quedar en 0.');
+      receiving.plan=plan;
+    }
+    confirmingReceipt=true;$('confirmReceiveButton').disabled=true;
+    document.querySelectorAll('[data-receive-index]').forEach(input=>{input.disabled=true;});
+    for(const entry of receiving.plan) {
+      const latest=findEntry(entry.order.id,entry.item.id);
+      if(!latest||latest.item.cancelledAt)throw Error('El pedido fue quitado. Cerrá y revisá la lista.');
+      if(latest.item.receipts?.[entry.operationId])continue;
+      if(Number(latest.item.receivedPacks||0)!==entry.before)throw Error('Otra computadora recibió este pedido. Cerrá y revisá las cantidades pendientes.');
+      const product=listProducts().find(p=>p.id===entry.item.productId);
+      if(!product)throw Error('El producto ya no está en el catálogo. Revisá el pedido.');
+      const units=Number((entry.packs*Number(entry.item.packQuantity||1)).toFixed(3));
+      window.DB.adjustProductStock(product.id,units,entry.local,{id:entry.operationId,reason:'Compra para '+label(entry.local)});
+      await window.DB.flushWrites();
+      window.DB.updatePurchaseOrder(entry.order.id,current=>{
+        if(!current)return;
+        const found=current.items.find(item=>item.id===entry.item.id);
+        if(!found||found.cancelledAt)return;
+        if(found.receipts?.[entry.operationId])return current;
+        if(Number(found.receivedPacks||0)!==entry.before)return;
+        const date=new Date().toISOString(),receivedPacks=entry.before+entry.packs;
+        const items=current.items.map(item=>item.id!==entry.item.id?item:{...item,local:entry.local,
+          receivedLocal:entry.local,receivedPacks,receivedUnits:Number((receivedPacks*Number(item.packQuantity||1)).toFixed(3)),
+          receivedAt:receivedPacks>=Number(item.orderedPacks)?date:null,unavailableAt:null,
+          receipts:{...(item.receipts||{}),[entry.operationId]:{packs:entry.packs,local:entry.local,date}}});
+        const complete=items.every(item=>remaining(item)===0);
+        return {...current,items,status:complete?'completed':'active',completedAt:complete?date:null};
+      });
+      await window.DB.flushWrites();
+    }
+    $('receiveDialog').close();receiving=null;render();
+  } catch(error) {alert(error.message+' Si el guardado falló, reintentá sin cambiar las cantidades.');}
+  finally {confirmingReceipt=false;$('confirmReceiveButton').disabled=false;}
 }
-
-$("supplierChatList").addEventListener("click", function (event) {
-  const button = event.target.closest("[data-group-key]");
-  if (!button) return;
-  selectedGroupKey = button.dataset.groupKey;
+async function markUnavailable(index) {
+  const row=selectedGroup()?.rows[index];if(!row)return;
+  const unavailable=row.entries.every(entry=>entry.item.unavailableAt), date=unavailable?null:new Date().toISOString();
+  try {
+    for(const entry of row.entries) {
+      window.DB.updatePurchaseOrder(entry.order.id,current=>current?{...current,items:current.items.map(item=>item.id===entry.item.id&&remaining(item)>0?{...item,unavailableAt:date}:item)}:undefined);
+      await window.DB.flushWrites();
+    }
+  }catch(error){alert(error.message);}
   render();
-  if (window.innerWidth < 780) {
-    $("supplierDetail").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-});
-
-$("supplierDetail").addEventListener("click", function (event) {
-  const button = event.target.closest("[data-order-id][data-item-id]");
-  if (!button) return;
-  openReceiveDialog(button.dataset.orderId, button.dataset.itemId);
-});
-
-$("copyPurchaseMessageButton").addEventListener("click", copyPurchaseMessage);
-$("clearPurchaseMessageButton").addEventListener("click", clearPurchaseMessage);
-$("receivedPacksInput").addEventListener("input", updateStockPreview);
-$("receivedLocalInput").addEventListener("change", updateStockPreview);
-$("cancelReceiveButton").addEventListener("click", function () {
-  $("receiveDialog").close();
-  receiving = null;
-});
-$("receiveForm").addEventListener("submit", function (event) {
-  event.preventDefault();
-  confirmReceived();
-});
-
-window.addEventListener("panaderia:store-changed", function (event) {
-  const name = event.detail && event.detail.name;
-  if (name === "purchaseOrdersById" || name === "productsById") render();
-});
-
-window.addEventListener("panaderia:database-error", function () {
-  alert("No se pudo confirmar la compra. Revisá la conexión antes de volver a intentar.");
-});
-
+}
+document.querySelectorAll('[data-shopping-local]').forEach(button=>button.addEventListener('click',()=>{
+  selectedLocal=button.dataset.shoppingLocal;history.replaceState(null,'','?local='+selectedLocal);render();
+}));
+$('supplierChatList').addEventListener('click',event=>{const button=event.target.closest('[data-group-key]');if(!button)return;selectedGroupKey=button.dataset.groupKey;render();if(window.innerWidth<780)$('supplierDetail').scrollIntoView({behavior:'smooth',block:'start'});});
+$('supplierDetail').addEventListener('click',event=>{const receive=event.target.closest('[data-receive-row]'),unavailable=event.target.closest('[data-unavailable-row]');if(receive)openReceiveDialog(Number(receive.dataset.receiveRow));if(unavailable)markUnavailable(Number(unavailable.dataset.unavailableRow));});
+$('copyPurchaseMessageButton').addEventListener('click',copyPurchaseMessage);
+$('receiveAllocations').addEventListener('input',updateStockPreview);
+$('cancelReceiveButton').addEventListener('click',()=>{if(confirmingReceipt)return;$('receiveDialog').close();receiving=null;});
+$('receiveDialog').addEventListener('cancel',event=>{if(confirmingReceipt)event.preventDefault();else receiving=null;});
+$('receiveForm').addEventListener('submit',event=>{event.preventDefault();confirmReceived();});
+window.addEventListener('panaderia:store-changed',event=>{if(['purchaseOrdersById','productsById'].includes(event.detail?.name))render();});
 render();

@@ -1,30 +1,12 @@
-const {
-  createId,
-  listByStore,
-  listProducts,
-  listSales,
-  removeById,
-  saveProduct,
-  suppliers,
-  upsertById,
-} = window.DB;
-
-const $ = (id) => document.getElementById(id);
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const { createId, listByStore, listProducts, listSales, saveProduct, suppliers, upsertById } = window.DB;
+const { LOCALS, label, localOf, remaining, weeklySales } = window.Purchases;
+const $ = id => document.getElementById(id);
 const PAGE_SIZE = 20;
-
-let importantProducts = [];
-let generalProducts = [];
-let recentSalesCount = 0;
-let allSalesCount = 0;
-let catalogSearch = "";
-let catalogView = "important";
-let catalogPage = 1;
-let draftByProduct = new Map();
-let hasRemoteProducts = false;
-let hasRemoteSales = false;
-let isSavingCatalog = false;
-
+let selectedLocal = new URLSearchParams(location.search).get("local");
+if (!LOCALS.includes(selectedLocal)) selectedLocal = "";
+let generalProducts = [], catalogSearch = "", catalogPage = 1, isSavingCatalog = false;
+const draftsByLocal = Object.fromEntries(LOCALS.map(local => [local, new Map()]));
+function drafts() { return draftsByLocal[selectedLocal]; }
 function escapeHtml(value) {
   return String(value == null ? "" : value)
     .replaceAll("&", "&amp;")
@@ -88,472 +70,168 @@ function isOwnSupplier(value) {
   return canonicalSupplier(value) === "Elaboracion propia";
 }
 
-function activeOrders() {
-  return listByStore("purchaseOrdersById")
-    .filter(function (order) {
-      return order.status !== "completed" && (order.items || []).some(function (item) {
-        return !item.receivedAt;
-      });
-    })
-    .sort(function (a, b) {
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    });
-}
 
+function activeOrders() {
+  return listByStore("purchaseOrdersById").filter(order =>
+    (order.items || []).some(item => localOf(order,item) === selectedLocal && remaining(item) > 0));
+}
 function pendingEntryForProduct(productId) {
-  const orders = activeOrders();
-  for (const order of orders) {
-    const item = (order.items || []).find(function (entry) {
-      return entry.productId === productId && !entry.receivedAt;
-    });
-    if (item) return { order: order, item: item };
+  for (const order of activeOrders()) {
+    const item = order.items.find(item => item.productId === productId && localOf(order,item) === selectedLocal && remaining(item) > 0);
+    if (item) return {order,item};
   }
   return null;
 }
-
-function draftFor(productId) {
-  if (!draftByProduct.has(productId)) draftByProduct.set(productId, {});
-  return draftByProduct.get(productId);
-}
-
-function stateFor(row) {
-  const draft = draftByProduct.get(row.product.id) || {};
-  return {
-    packQuantity: Object.prototype.hasOwnProperty.call(draft, "packQuantity")
-      ? Number(draft.packQuantity)
-      : Math.max(0.001, Number(row.product.packQuantity || 1)),
-    supplier: Object.prototype.hasOwnProperty.call(draft, "supplier")
-      ? canonicalSupplier(draft.supplier)
-      : canonicalSupplier(row.product.supplier),
-    stock: Number(row.product.stock || 0),
-    orderPacks: Math.max(0, Math.floor(Number(draft.orderPacks || 0))),
-  };
-}
-
-function suggestedPacks(row, state) {
-  if (isOwnSupplier(state.supplier)) return 0;
-  const missingUnits = Math.max(0, Number(row.weeklySales || 0) - Number(state.stock || 0));
-  return Math.ceil(missingUnits / Math.max(0.001, Number(state.packQuantity || 1)));
-}
-
 function buildCatalog() {
   const products = listProducts();
-  const productsById = new Map(products.map(function (product) {
-    return [product.id, product];
-  }));
-  const productsByName = new Map(products.map(function (product) {
-    return [normalized(product.name), product];
-  }));
-  const allSales = listSales();
-  const since = Date.now() - WEEK_MS;
-  const weeklyByProduct = new Map();
-  const historicalByProduct = new Map();
-
-  allSales.forEach(function (sale) {
-    const saleTime = new Date(sale.date || 0).getTime();
-    const isRecent = Number.isFinite(saleTime) && saleTime >= since;
-
-    (sale.items || []).forEach(function (item) {
-      const product = productsById.get(item.productId) || productsByName.get(normalized(item.name));
-      if (!product) return;
-      const quantity = Number(item.quantity || 0);
-      historicalByProduct.set(product.id, Number(historicalByProduct.get(product.id) || 0) + quantity);
-      if (isRecent) {
-        weeklyByProduct.set(product.id, Number(weeklyByProduct.get(product.id) || 0) + quantity);
-      }
-    });
-  });
-
-  allSalesCount = allSales.length;
-  recentSalesCount = allSales.filter(function (sale) {
-    const time = new Date(sale.date || 0).getTime();
-    return Number.isFinite(time) && time >= since;
-  }).length;
-
-  generalProducts = products
-    .map(function (product) {
-      const weeklySales = Number(weeklyByProduct.get(product.id) || 0);
-      const historicalSales = Number(historicalByProduct.get(product.id) || 0);
-      return {
-        product: product,
-        weeklySales: weeklySales,
-        historicalSales: historicalSales,
-      };
-    })
-    .sort(function (a, b) {
-      return a.product.name.localeCompare(b.product.name, "es-AR");
-    });
-
-  importantProducts = generalProducts
-    .filter(function (row) {
-      return !isOwnSupplier(row.product.supplier) && row.historicalSales > 0;
-    })
-    .sort(function (a, b) {
-      return b.historicalSales - a.historicalSales
-        || b.weeklySales - a.weeklySales
-        || a.product.name.localeCompare(b.product.name, "es-AR");
-    })
-    .slice(0, 25);
+  const weekly = weeklySales(listSales(), products, selectedLocal);
+  generalProducts = products.map(product => ({product,weeklySales:weekly.get(product.id) || 0}));
 }
-
-function supplierOptions(selectedSupplier) {
-  const selected = canonicalSupplier(selectedSupplier);
-  const values = new Set(suppliers.map(canonicalSupplier));
-  generalProducts.forEach(function (row) {
-    values.add(canonicalSupplier(row.product.supplier));
-  });
-  values.add(selected);
-  return Array.from(values).map(function (supplier) {
-    return '<option value="' + escapeHtml(supplier) + '"' + (supplier === selected ? " selected" : "") + '>' + escapeHtml(supplier) + '</option>';
-  }).join("");
+function stateFor(row) {
+  const draft = drafts().get(row.product.id) || {};
+  return { packQuantity: Number(draft.packQuantity ?? row.product.packQuantity ?? 1),
+    supplier: canonicalSupplier(draft.supplier ?? row.product.supplier),
+    stock: Number(draft.stock ?? window.DB.productStock(row.product, selectedLocal)),
+    orderPacks: draft.orderPacks };
 }
-
-function matchingGeneralProducts() {
-  if (!catalogSearch) return generalProducts;
-  return generalProducts.filter(function (row) {
-    const product = row.product;
-    const searchable = normalized((product.name || "") + " " + (product.barcode || "") + " " + (product.supplier || ""));
-    return searchable.includes(catalogSearch);
-  });
+function suggestedPacks(row,state) {
+  return isOwnSupplier(state.supplier) ? 0 : Math.ceil(Math.max(0,row.weeklySales-state.stock)/Math.max(0.001,state.packQuantity));
 }
-
-function visibleRows() {
-  if (catalogView === "important") return importantProducts;
-  const matching = matchingGeneralProducts();
-  const start = (catalogPage - 1) * PAGE_SIZE;
-  return matching.slice(start, start + PAGE_SIZE);
+function supplierOptions(selected) {
+  return Array.from(new Set([...suppliers,selected,...generalProducts.map(row=>row.product.supplier)].map(canonicalSupplier)))
+    .map(supplier=>`<option value="${escapeHtml(supplier)}"${supplier===selected?" selected":""}>${escapeHtml(supplier)}</option>`).join("");
 }
-
-function totalPages() {
-  return Math.max(1, Math.ceil(matchingGeneralProducts().length / PAGE_SIZE));
-}
-
-function renderSummary() {
-  const orders = activeOrders();
-  $("orderSummary").innerHTML =
-    '<article><span>Ventas históricas</span><strong>' + allSalesCount + '</strong><small>Central, Sucursal y Cafetería</small></article>' +
-    '<article><span>Productos importantes</span><strong>' + importantProducts.length + '</strong><small>Los 25 más vendidos</small></article>' +
-    '<article><span>Órdenes activas</span><strong>' + orders.length + '</strong><small>Pendientes en Compra</small></article>';
-}
-
 function rowHtml(row) {
-  const product = row.product;
-  const state = stateFor(row);
-  const unit = product.weighable ? "kg" : "un.";
-  const suggestion = suggestedPacks(row, state);
-  const ownProduction = isOwnSupplier(state.supplier);
-  const pending = pendingEntryForProduct(product.id);
-  let orderControl = '<span class="no-purchase">Elaboración propia</span>';
-
-  if (pending) {
-    orderControl =
-      '<div class="row-order-control pending-control">' +
-        '<label class="order-quantity"><span>Ordenado: ' + numberText(pending.item.orderedPacks) + ' packs</span><input type="number" value="' + Number(pending.item.orderedPacks || 0) + '" disabled aria-label="Packs pendientes de ' + escapeHtml(product.name) + '"></label>' +
-        '<button class="row-order-button pending" type="button" data-order-action="remove">Pendiente</button>' +
-      '</div>';
-  } else if (!ownProduction) {
-    orderControl =
-      '<div class="row-order-control">' +
-        '<label class="order-quantity"><span class="suggestion-hint">Sugerido: ' + suggestion + ' packs</span><input type="number" min="0" step="1" inputmode="numeric" value="' + (state.orderPacks || "") + '" placeholder="' + suggestion + '" data-field="orderPacks" aria-label="Packs de ' + escapeHtml(product.name) + '"></label>' +
-        '<button class="row-order-button order" type="button" data-order-action="add">Ordenar</button>' +
-      '</div>';
-  }
-
-  return '<tr data-product-id="' + escapeHtml(product.id) + '">' +
-    '<td><strong>' + escapeHtml(product.name) + '</strong></td>' +
-    '<td><label class="compact-field"><span class="sr-only">Cantidad por pack</span><input type="number" min="0.001" step="0.001" value="' + state.packQuantity + '" data-field="packQuantity"></label></td>' +
-    '<td><label class="compact-field"><span class="sr-only">Mayorista</span><select data-field="supplier">' + supplierOptions(state.supplier) + '</select></label></td>' +
-    '<td>' + numberText(row.weeklySales) + ' ' + unit + '</td>' +
-    '<td><strong>' + numberText(row.product.stock) + ' ' + unit + '</strong><small>Central: ' + numberText(row.product.stockByLocal.Central) + '<br>Sucursal: ' + numberText(row.product.stockByLocal.Sucursal) + '<br>Cafetería: ' + numberText(row.product.stockByLocal.Cafeteria) + '</small><a href="admin.html">Corregir por local</a></td>' +
-    '<td>' + orderControl + '</td>' +
-    '</tr>';
+  const p=row.product, state=stateFor(row), unit=p.weighable?"kg":"un.", pending=pendingEntryForProduct(p.id);
+  const suggestion=suggestedPacks(row,state);
+  let control='<span class="no-purchase">Elaboración propia</span>';
+  if(pending) control=`<div class="row-order-control pending-control"><span>Pedido: ${numberText(remaining(pending.item))} packs pendientes</span><button type="button" class="row-order-button pending" data-order-action="remove">Quitar pendiente</button></div>`;
+  else if(!isOwnSupplier(state.supplier)) control=`<div class="row-order-control"><label class="order-quantity"><span class="suggestion-hint">Sugerido: ${suggestion} packs</span><input type="number" min="1" step="1" value="${state.orderPacks ?? ""}" placeholder="${suggestion}" data-field="orderPacks" aria-label="Packs de ${escapeHtml(p.name)}"></label><button type="button" class="row-order-button order" data-order-action="add">Ordenar</button></div>`;
+  return `<tr data-product-id="${escapeHtml(p.id)}">
+    <td><strong>${escapeHtml(p.name)}</strong></td>
+    <td><label class="compact-field"><span class="sr-only">Cantidad por pack</span><input type="number" min="0.001" step="0.001" value="${state.packQuantity}" data-field="packQuantity"></label></td>
+    <td><label class="compact-field"><span class="sr-only">Mayorista</span><select data-field="supplier">${supplierOptions(state.supplier)}</select></label></td>
+    <td>${numberText(row.weeklySales)} ${unit}</td>
+    <td><label class="stock-field"><span class="sr-only">Stock ${label(selectedLocal)}</span><input type="number" step="0.001" value="${state.stock}" data-field="stock"><small>${unit} en ${label(selectedLocal)}</small></label></td>
+    <td>${control}</td></tr>`;
 }
-
-function renderPagination() {
-  const pagination = $("catalogPagination");
-  const pages = totalPages();
-  pagination.classList.toggle("hidden", catalogView !== "general");
-  $("catalogPageInput").max = pages;
-  $("catalogPageInput").value = catalogPage;
-  $("catalogTotalPages").textContent = pages;
-  $("previousCatalogPage").disabled = catalogPage <= 1;
-  $("nextCatalogPage").disabled = catalogPage >= pages;
+function matchingRows() {
+  return generalProducts.filter(({product:p}) => normalized(`${p.name} ${p.barcode || ""} ${p.supplier || ""}`).includes(catalogSearch));
 }
-
-function changedProductCount() {
-  return Array.from(draftByProduct.entries()).filter(function (entry) {
-    const row = generalProducts.find(function (item) { return item.product.id === entry[0]; });
-    if (!row) return false;
-    const draft = entry[1];
-    return (Object.prototype.hasOwnProperty.call(draft, "packQuantity") && Number(draft.packQuantity) !== Number(row.product.packQuantity || 1))
-      || (Object.prototype.hasOwnProperty.call(draft, "supplier") && canonicalSupplier(draft.supplier) !== canonicalSupplier(row.product.supplier));
-  }).length;
-}
-
 function renderSaveStatus() {
-  const count = changedProductCount();
-  $("catalogSaveStatus").textContent = count === 0
-    ? "Mayorista y packs sin cambios. El stock se corrige por local en Administración."
-    : count + (count === 1 ? " producto modificado sin guardar." : " productos modificados sin guardar.");
-  $("catalogSaveStatus").classList.toggle("has-changes", count > 0);
-  $("saveCatalogButton").disabled = count === 0;
+  const count=Array.from(drafts().values()).filter(d=>["stock","supplier","packQuantity"].some(key=>Object.hasOwn(d,key))).length;
+  $("catalogSaveStatus").textContent=count?`${count} productos con cambios sin guardar.`:`Stock de ${label(selectedLocal)}. El proveedor y el tamaño del pack son compartidos entre los locales.`;
+  $("saveCatalogButton").disabled=isSavingCatalog || !count;
 }
-
 function renderCatalog() {
+  document.querySelectorAll('[data-order-local]').forEach(button=>{
+    const active=button.dataset.orderLocal===selectedLocal;
+    button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active));
+  });
+  $("orderWorkspace").classList.toggle("hidden",!selectedLocal);
+  $("chooseLocalNotice").classList.toggle("hidden",!!selectedLocal);
+  if(!selectedLocal)return;
   buildCatalog();
-  catalogPage = Math.min(Math.max(1, catalogPage), totalPages());
-  const rows = visibleRows();
-
-  $("importantCount").textContent = importantProducts.length;
-  $("generalCount").textContent = generalProducts.length;
-  $("catalogTitle").textContent = catalogView === "important" ? "Lo más importante" : "General";
-  $("catalogDescription").textContent = catalogView === "important"
-    ? "Los 25 productos más vendidos de todo el historial. Elaboración propia no se incluye."
-    : (catalogSearch
-      ? "Resultados para “" + $("catalogSearchInput").value.trim() + "”, mostrados de 20 por página."
-      : "Todos los productos, ordenados alfabéticamente y mostrados de 20 por página.");
-  $("importantTab").classList.toggle("active", catalogView === "important");
-  $("importantTab").setAttribute("aria-selected", catalogView === "important" ? "true" : "false");
-  $("generalTab").classList.toggle("active", catalogView === "general");
-  $("generalTab").setAttribute("aria-selected", catalogView === "general" ? "true" : "false");
-
-  $("suggestionRows").innerHTML = rows.map(rowHtml).join("");
-  $("suggestionEmpty").classList.toggle("hidden", rows.length > 0);
-  $("suggestionEmptyText").textContent = catalogView === "important"
-    ? "Cuando haya ventas registradas aparecerán aquí."
-    : (catalogSearch ? "Probá con otro nombre, código o mayorista." : "No hay productos cargados.");
-  renderPagination();
-  renderSummary();
+  const matching=matchingRows(),pages=Math.max(1,Math.ceil(matching.length/PAGE_SIZE));
+  catalogPage=Math.max(1,Math.min(catalogPage,pages));
+  $("catalogTitle").textContent=`Pedido de ${label(selectedLocal)}`;
+  $("catalogDescription").textContent=`Todos los productos. Sugerencias según las ventas de los últimos 7 días y el stock de ${label(selectedLocal)}.`;
+  $("stockColumnTitle").textContent=`Stock ${label(selectedLocal)}`;
+  $("suggestionRows").innerHTML=matching.slice((catalogPage-1)*PAGE_SIZE,catalogPage*PAGE_SIZE).map(rowHtml).join("");
+  $("suggestionEmpty").classList.toggle("hidden",matching.length>0);
+  $("suggestionEmptyText").textContent=catalogSearch?"Probá otro nombre, código o mayorista.":"No hay productos cargados.";
+  $("catalogPageInput").value=catalogPage;$("catalogPageInput").max=pages;$("catalogTotalPages").textContent=pages;
+  $("previousCatalogPage").disabled=catalogPage===1;$("nextCatalogPage").disabled=catalogPage===pages;
+  const entries=window.Purchases.entries(listByStore("purchaseOrdersById"),selectedLocal);
+  $("orderSummary").innerHTML=`<article><span>Local</span><strong>${label(selectedLocal)}</strong><small>Stock y ventas propios</small></article><article><span>Productos</span><strong>${generalProducts.length}</strong><small>Catálogo completo</small></article><article><span>Pendientes</span><strong>${entries.length}</strong><small>Productos por comprar</small></article>`;
+  $("activeOrderList").innerHTML=entries.length
+    ? `<a class="active-order-card" href="lista-compra.html?local=${selectedLocal}"><div><strong>Ver pedido de ${label(selectedLocal)}</strong><span>${entries.length} productos · ${numberText(entries.reduce((sum,e)=>sum+remaining(e.item),0))} packs pendientes</span></div><span class="order-arrow">›</span></a>`
+    : '<p class="muted">Todavía no hay productos pendientes para este local.</p>';
+  $("legacyOrderNotice").classList.toggle("hidden",!entries.some(e=>!e.order.local&&!e.item.local));
   renderSaveStatus();
 }
-
-function updateRowSuggestion(rowElement) {
-  const productId = rowElement.dataset.productId;
-  const row = generalProducts.find(function (item) { return item.product.id === productId; });
-  const hint = rowElement.querySelector(".suggestion-hint");
-  const orderInput = rowElement.querySelector('[data-field="orderPacks"]');
-  if (!row || !hint || !orderInput) return;
-  const suggestion = suggestedPacks(row, stateFor(row));
-  hint.textContent = "Sugerido: " + suggestion + " packs";
-  orderInput.placeholder = suggestion;
-}
-
 function updateDraft(event) {
-  const field = event.target.dataset.field;
-  const rowElement = event.target.closest("[data-product-id]");
-  if (!field || !rowElement) return;
-  const draft = draftFor(rowElement.dataset.productId);
-
-  if (field === "supplier") draft.supplier = event.target.value;
-  if (field === "packQuantity") draft[field] = Number(event.target.value || 0);
-  if (field === "orderPacks") draft.orderPacks = Math.max(0, Math.floor(Number(event.target.value || 0)));
-
-  if (field === "packQuantity") updateRowSuggestion(rowElement);
+  const field=event.target.dataset.field,rowElement=event.target.closest('[data-product-id]');
+  if(!field||!rowElement||!selectedLocal)return;
+  const id=rowElement.dataset.productId;
+  if(!drafts().has(id))drafts().set(id,{});
+  const draft=drafts().get(id),row=generalProducts.find(row=>row.product.id===id);
+  if(field==='stock'&&!Object.hasOwn(draft,'stockBaseline'))draft.stockBaseline=window.DB.productStock(row.product,selectedLocal);
+  draft[field]=field==='supplier'?event.target.value:(event.target.value===''&&field==='orderPacks'?undefined:Number(event.target.value));
+  const hint=rowElement.querySelector('.suggestion-hint');
+  if(hint)hint.textContent=`Sugerido: ${suggestedPacks(row,stateFor(row))} packs`;
   renderSaveStatus();
 }
-
-function saveCatalogChanges(showMessage) {
-  const changed = [];
-  isSavingCatalog = true;
-
-  Array.from(draftByProduct.entries()).forEach(function (entry) {
-    const productId = entry[0];
-    const draft = entry[1];
-    const row = generalProducts.find(function (item) { return item.product.id === productId; });
-    if (!row) return;
-
-    const hasPack = Object.prototype.hasOwnProperty.call(draft, "packQuantity");
-    const hasSupplier = Object.prototype.hasOwnProperty.call(draft, "supplier");
-    if (!hasPack && !hasSupplier) return;
-
-    const product = row.product;
-    const packQuantity = hasPack ? Math.max(0.001, Number(draft.packQuantity || 1)) : Number(product.packQuantity || 1);
-    const supplier = hasSupplier ? canonicalSupplier(draft.supplier) : canonicalSupplier(product.supplier);
-    const isChanged = packQuantity !== Number(product.packQuantity || 1)
-      || supplier !== canonicalSupplier(product.supplier);
-
-    if (isChanged) {
-      saveProduct(Object.assign({}, product, {
-        packQuantity: packQuantity,
-        supplier: supplier,
-      }));
-      changed.push(product.id);
+async function saveCatalogChanges(showMessage) {
+  if(isSavingCatalog)return false;
+  isSavingCatalog=true;renderSaveStatus();
+  const local=selectedLocal, currentDrafts=drafts();
+  try {
+    for(const [id,draft] of currentDrafts) {
+      const product=listProducts().find(p=>p.id===id);if(!product)continue;
+      if(Object.hasOwn(draft,'packQuantity')&&(!Number.isFinite(draft.packQuantity)||draft.packQuantity<=0))throw Error('La cantidad por pack debe ser mayor que cero.');
+      if(Object.hasOwn(draft,'supplier')||Object.hasOwn(draft,'packQuantity')) {
+        saveProduct({...product,supplier:draft.supplier??product.supplier,packQuantity:draft.packQuantity??product.packQuantity});
+        await window.DB.flushWrites();delete draft.supplier;delete draft.packQuantity;
+      }
+      if(Object.hasOwn(draft,'stock')) {
+        try {
+          window.DB.setProductStock(id,draft.stock,local,{expected:draft.stockBaseline,reason:'Conteo desde pedido de '+label(local)});
+          await window.DB.flushWrites();
+        } finally { delete draft.stock;delete draft.stockBaseline; }
+      }
     }
-
-    delete draft.packQuantity;
-    delete draft.supplier;
-    if (!Object.keys(draft).length) draftByProduct.delete(productId);
-  });
-
-  isSavingCatalog = false;
-  renderCatalog();
-  if (showMessage) {
-    alert(changed.length
-      ? "Se guardaron los datos de " + changed.length + (changed.length === 1 ? " producto." : " productos.")
-      : "No había cambios para guardar.");
-  }
-  return changed.length;
+    if(showMessage)alert('Cambios guardados.');
+    return true;
+  } catch(error) {alert(error.message);return false;}
+  finally {isSavingCatalog=false;renderCatalog();}
 }
-
-function orderProduct(productId) {
-  saveCatalogChanges(false);
-  buildCatalog();
-
-  const row = generalProducts.find(function (entry) {
-    return entry.product.id === productId;
-  });
-  if (!row || pendingEntryForProduct(productId)) {
-    renderCatalog();
-    return;
-  }
-
-  const state = stateFor(row);
-  if (isOwnSupplier(state.supplier)) {
-    alert("Los productos de elaboración propia no se agregan a la orden de compra.");
-    return;
-  }
-
-  const packs = state.orderPacks || suggestedPacks(row, state);
-  if (packs < 1) {
-    alert("Ingresá cuántos packs querés ordenar.");
-    return;
-  }
-
-  const item = {
-    id: createId("purchase_item"),
-    productId: row.product.id,
-    name: row.product.name,
-    supplier: canonicalSupplier(state.supplier),
-    weighable: !!row.product.weighable,
-    packQuantity: Math.max(0.001, Number(state.packQuantity || 1)),
-    suggestedPacks: suggestedPacks(row, state),
-    orderedPacks: packs,
-    weeklySales: Number(row.weeklySales.toFixed(3)),
-    stockAtCreation: Number(state.stock),
-    receivedAt: null,
-  };
-
-  const existingOrder = activeOrders()[0];
-  const order = existingOrder
-    ? Object.assign({}, existingOrder, {
-        items: (existingOrder.items || []).concat(item),
-        status: "active",
-        completedAt: null,
-      })
-    : {
-        id: createId("purchase_order"),
-        createdAt: new Date().toISOString(),
-        status: "active",
-        items: [item],
-      };
-
-  upsertById("purchaseOrdersById", order);
-  const draft = draftFor(productId);
-  delete draft.orderPacks;
-  if (!Object.keys(draft).length) draftByProduct.delete(productId);
-  renderCatalog();
-  renderActiveOrders();
+let ordering=false;
+async function orderProduct(productId) {
+  if(ordering)return;ordering=true;
+  try {
+    if(!await saveCatalogChanges(false))return;
+    buildCatalog();
+    const row=generalProducts.find(row=>row.product.id===productId);
+    if(!row||pendingEntryForProduct(productId))return;
+    const state=stateFor(row),packs=state.orderPacks??suggestedPacks(row,state);
+    if(isOwnSupplier(state.supplier))return;
+    if(!Number.isSafeInteger(packs)||packs<1)throw Error('Ingresá una cantidad entera de packs mayor que cero.');
+    const item={id:createId('purchase_item'),local:selectedLocal,productId,name:row.product.name,
+      supplier:canonicalSupplier(state.supplier),weighable:!!row.product.weighable,packQuantity:state.packQuantity,
+      suggestedPacks:suggestedPacks(row,state),orderedPacks:packs,weeklySales:row.weeklySales,stockAtCreation:state.stock,receivedAt:null};
+    // Independent request IDs prevent one store from overwriting another store's order.
+    upsertById('purchaseOrdersById',{id:createId('purchase_order'),local:selectedLocal,createdAt:new Date().toISOString(),status:'active',items:[item]});
+    await window.DB.flushWrites();drafts().delete(productId);
+  } catch(error) {alert(error.message);}
+  finally {ordering=false;renderCatalog();}
 }
-
-function removePendingProduct(productId) {
-  const pending = pendingEntryForProduct(productId);
-  if (!pending) {
-    renderCatalog();
-    return;
-  }
-
-  if (!confirm("¿Quitar " + pending.item.name + " de la orden de compra?")) return;
-
-  const remainingItems = (pending.order.items || []).filter(function (item) {
-    return item.id !== pending.item.id;
-  });
-
-  if (!remainingItems.length) {
-    removeById("purchaseOrdersById", pending.order.id);
-  } else {
-    const stillPending = remainingItems.some(function (item) { return !item.receivedAt; });
-    upsertById("purchaseOrdersById", Object.assign({}, pending.order, {
-      items: remainingItems,
-      status: stillPending ? "active" : "completed",
-      completedAt: stillPending ? null : new Date().toISOString(),
-    }));
-  }
-
+async function removePendingProduct(productId) {
+  const pending=pendingEntryForProduct(productId);if(!pending)return;
+  if(!confirm(`¿Quitar lo pendiente de ${pending.item.name} para ${label(selectedLocal)}?`))return;
+  try {
+    window.DB.updatePurchaseOrder(pending.order.id,current=>{
+      if(!current)return;
+      return {...current,items:(current.items||[]).map(item=>item.id===pending.item.id?{...item,cancelledAt:new Date().toISOString()}:item)};
+    });
+    await window.DB.flushWrites();
+  } catch(error){alert(error.message);}
   renderCatalog();
-  renderActiveOrders();
 }
-
-function renderActiveOrders() {
-  const orders = activeOrders();
-  $("activeOrderList").innerHTML = orders.length === 0
-    ? '<div class="empty-purchase"><strong>No hay órdenes activas.</strong><span>Cuando crees una aparecerá acá y en el celular.</span></div>'
-    : orders.map(function (order) {
-        const pending = (order.items || []).filter(function (item) { return !item.receivedAt; });
-        const supplierCount = new Set(pending.map(function (item) { return item.supplier || "Otro"; })).size;
-        return '<a class="active-order-card" href="lista-compra.html">' +
-          '<div><strong>Orden del ' + dateText(order.createdAt) + '</strong><span>' + supplierCount + ' mayoristas · ' + pending.length + ' productos pendientes</span></div>' +
-          '<span class="order-arrow">›</span>' +
-          '</a>';
-      }).join("");
-}
-
-function changePage(nextPage) {
-  catalogPage = Math.min(Math.max(1, nextPage), totalPages());
-  renderCatalog();
-  document.querySelector(".order-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-$("suggestionRows").addEventListener("input", updateDraft);
-$("suggestionRows").addEventListener("change", updateDraft);
-$("suggestionRows").addEventListener("click", function (event) {
-  const button = event.target.closest("[data-order-action]");
-  const row = event.target.closest("[data-product-id]");
-  if (!button || !row) return;
-  if (button.dataset.orderAction === "add") orderProduct(row.dataset.productId);
-  if (button.dataset.orderAction === "remove") removePendingProduct(row.dataset.productId);
-});
-
-document.querySelector(".catalog-tabs").addEventListener("click", function (event) {
-  const button = event.target.closest("[data-catalog-view]");
-  if (!button) return;
-  catalogView = button.dataset.catalogView;
-  catalogSearch = "";
-  $("catalogSearchInput").value = "";
-  catalogPage = 1;
-  renderCatalog();
-});
-
-$("catalogSearchInput").addEventListener("input", function () {
-  catalogSearch = normalized(this.value);
-  if (catalogSearch) catalogView = "general";
-  catalogPage = 1;
-  renderCatalog();
-});
-
-$("catalogPageInput").addEventListener("change", function () {
-  changePage(Number(this.value || 1));
-});
-$("previousCatalogPage").addEventListener("click", function () { changePage(catalogPage - 1); });
-$("nextCatalogPage").addEventListener("click", function () { changePage(catalogPage + 1); });
-$("refreshSuggestionsButton").addEventListener("click", renderCatalog);
-$("saveCatalogButton").addEventListener("click", function () { saveCatalogChanges(true); });
-
-window.addEventListener("panaderia:store-changed", function (event) {
-  const name = event.detail && event.detail.name;
-  if (name === "productsById") hasRemoteProducts = true;
-  if (name === "salesById") hasRemoteSales = true;
-  if (name === "purchaseOrdersById") {
-    renderActiveOrders();
-    renderSummary();
-  }
-  if (!isSavingCatalog && (name === "productsById" || name === "salesById") && hasRemoteProducts && hasRemoteSales) {
-    renderCatalog();
-  }
-});
-
-window.addEventListener("panaderia:database-error", function () {
-  alert("No se pudo guardar el cambio. Revisá la conexión a internet.");
-});
-
+document.querySelectorAll('[data-order-local]').forEach(button=>button.addEventListener('click',()=>{
+  if(isSavingCatalog||ordering)return;
+  selectedLocal=button.dataset.orderLocal;catalogSearch='';catalogPage=1;$("catalogSearchInput").value='';
+  history.replaceState(null,'','?local='+selectedLocal);renderCatalog();
+}));
+$("suggestionRows").addEventListener('input',updateDraft);
+$("suggestionRows").addEventListener('change',updateDraft);
+$("suggestionRows").addEventListener('click',event=>{const button=event.target.closest('[data-order-action]'),row=event.target.closest('[data-product-id]');if(!button||!row)return;if(button.dataset.orderAction==='add')orderProduct(row.dataset.productId);else removePendingProduct(row.dataset.productId);});
+$("catalogSearchInput").addEventListener('input',event=>{catalogSearch=normalized(event.target.value);catalogPage=1;renderCatalog();});
+$("catalogPageInput").addEventListener('change',event=>{catalogPage=Number(event.target.value)||1;renderCatalog();});
+$("previousCatalogPage").addEventListener('click',()=>{catalogPage--;renderCatalog();});
+$("nextCatalogPage").addEventListener('click',()=>{catalogPage++;renderCatalog();});
+$("refreshSuggestionsButton").addEventListener('click',renderCatalog);
+$("saveCatalogButton").addEventListener('click',()=>saveCatalogChanges(true));
+window.addEventListener('panaderia:store-changed',event=>{if(['productsById','salesById','purchaseOrdersById'].includes(event.detail?.name)&&!isSavingCatalog&&!ordering)renderCatalog();});
+window.addEventListener('panaderia:database-error',()=>alert('No se pudo confirmar el guardado. Revisá la conexión antes de continuar.'));
 renderCatalog();
-renderActiveOrders();

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Compra - Panadería Josué</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/purchases.css?v=20260914-message">
+  <link rel="stylesheet" href="css/purchases.css?v=20260929-orders-local">
 </head>
 <body class="shopping-body">
   <main class="shopping-shell">
@@ -18,22 +18,13 @@
       <a class="secondary-button" href="index.html">Inicio</a>
     </header>
 
+    <nav class="local-selector shopping-local-selector" aria-label="Pedidos por local">
+      <button type="button" data-shopping-local="General">General<small>Total a comprar</small></button>
+      <button type="button" data-shopping-local="Central">Central<small>Lo pedido por Central</small></button>
+      <button type="button" data-shopping-local="Sucursal">Sucursal<small>Lo pedido por Sucursal</small></button>
+      <button type="button" data-shopping-local="Cafeteria">Cafetería<small>Lo pedido por Cafetería</small></button>
+    </nav>
     <section class="shopping-status" id="shoppingStatus"></section>
-
-    <section class="purchase-message-panel" aria-labelledby="purchaseMessageTitle">
-      <div class="purchase-message-head">
-        <div>
-          <p class="eyebrow">Resumen</p>
-          <h2 id="purchaseMessageTitle">Mensaje para WhatsApp</h2>
-          <p>Incluye solamente lo nuevo desde la última vez que limpiaste el mensaje.</p>
-        </div>
-        <div class="compact-actions purchase-message-actions">
-          <button class="secondary-button" id="clearPurchaseMessageButton" type="button">Limpiar mensaje</button>
-          <button class="primary-button" id="copyPurchaseMessageButton" type="button">Copiar para WhatsApp</button>
-        </div>
-      </div>
-      <textarea id="purchaseMessage" readonly aria-label="Resumen de la compra para WhatsApp" placeholder="Las compras y los pendientes aparecerán acá."></textarea>
-    </section>
 
     <div class="shopping-layout">
       <section class="supplier-inbox">
@@ -44,12 +35,22 @@
         <div class="supplier-chat-list" id="supplierChatList"></div>
       </section>
 
+      <div class="supplier-detail-column">
       <section class="supplier-detail panel" id="supplierDetail">
         <div class="empty-purchase">
           <strong>Elegí un mayorista</strong>
           <span>Los productos pendientes aparecerán acá.</span>
         </div>
       </section>
+      <p id="shoppingLegacyNotice" class="muted hidden">Los pedidos anteriores sin local registrado se muestran en Central.</p>
+      <section class="purchase-message-panel" aria-labelledby="purchaseMessageTitle">
+        <div class="purchase-message-head"><div>
+          <p class="eyebrow">Mayorista seleccionado</p><h2 id="purchaseMessageTitle">Mensaje para WhatsApp</h2>
+          <p>Copiá los pedidos pendientes de este chat y de la vista elegida.</p>
+        </div><button class="primary-button" id="copyPurchaseMessageButton" type="button">Copiar para WhatsApp</button></div>
+        <textarea id="purchaseMessage" readonly aria-label="Pedido del mayorista seleccionado" placeholder="Elegí un mayorista para ver su pedido."></textarea>
+      </section>
+      </div>
     </div>
   </main>
 
@@ -58,19 +59,12 @@
       <p class="eyebrow">Confirmar compra</p>
       <h2 id="receiveProductName">Producto</h2>
       <p class="muted" id="receiveProductInfo"></p>
-      <label>
-        ¿Cuántos packs llevás?
-        <input id="receivedPacksInput" type="number" min="0" step="1" inputmode="numeric" required>
-      </label>
-      <label>Local que recibe la compra
-        <select id="receivedLocalInput" required>
-          <option value="">Elegí un local</option><option>Central</option><option>Sucursal</option><option value="Cafeteria">Cafetería</option>
-        </select>
-      </label>
+      <div id="receiveAllocations" class="receive-allocations"></div>
+      <p class="muted">Confirmá lo conseguido para cada local. Si recibís menos, el resto sigue pendiente.</p>
       <p class="stock-preview" id="stockPreview"></p>
       <div class="dialog-actions">
         <button class="secondary-button" id="cancelReceiveButton" type="button">Cancelar</button>
-        <button class="primary-button" type="submit">Confirmar y sumar stock</button>
+        <button class="primary-button" id="confirmReceiveButton" type="submit">Confirmar y sumar stock</button>
       </div>
     </form>
   </dialog>
@@ -79,7 +73,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script>window.PANADERIA_SYNC_STORES = ["productsById", "purchaseOrdersById"];</script>
-  <script src="js/db.js?v=20260929-stock-local"></script>
-  <script src="js/shopping.js?v=20260929-stock-local"></script>
+  <script src="js/db.js?v=20260929-orders-local"></script>
+  <script src="js/purchase-utils.js?v=20260929-orders-local"></script>
+  <script src="js/shopping.js?v=20260929-orders-local"></script>
 </body>
 </html>

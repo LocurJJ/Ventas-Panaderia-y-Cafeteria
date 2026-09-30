@@ -105,3 +105,20 @@ test('new catalog products accept three stocks and later imports preserve existi
   db.saveProduct({...product,stock:900});
   assert.deepEqual(stocks(db),{Central:3,Sucursal:4,Cafeteria:5});
 });
+test('concurrent changes to different items of a legacy purchase order preserve both results', async () => {
+  const server=backend();
+  server.state.purchaseOrdersById={o:{id:'o',items:[{id:'a',orderedPacks:2},{id:'b',orderedPacks:3}]}};
+  const a=client(server),b=client(server);
+  a.updatePurchaseOrder('o',current=>({...current,items:current.items.map(item=>item.id==='a'?{...item,receivedPacks:1}:item)}));
+  b.updatePurchaseOrder('o',current=>({...current,items:current.items.map(item=>item.id==='b'?{...item,unavailableAt:'date'}:item)}));
+  await Promise.all([a.flushWrites(),b.flushWrites()]);
+  assert.equal(server.state.purchaseOrdersById.o.items[0].receivedPacks,1);
+  assert.equal(server.state.purchaseOrdersById.o.items[1].unavailableAt,'date');
+});
+test('denied purchase-order updates restore the previous request', async () => {
+  const server=backend();server.state.purchaseOrdersById={o:{id:'o',items:[{id:'a',orderedPacks:2}]}};
+  const db=client(server);server.deny();
+  db.updatePurchaseOrder('o',current=>({...current,items:[]}));
+  await assert.rejects(db.flushWrites(),/PERMISSION_DENIED/);
+  assert.equal(db.listByStore('purchaseOrdersById')[0].items.length,1);
+});

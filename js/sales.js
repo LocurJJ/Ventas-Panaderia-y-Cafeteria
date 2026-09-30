@@ -473,13 +473,13 @@ function isOwnProduction(product) {
 
 function activePurchaseOrders() {
   return listByStore("purchaseOrdersById")
-    .filter((order) => order.status !== "completed" && (order.items || []).some((item) => !item.receivedAt))
+    .filter((order) => order.status !== "completed" && (order.items || []).some((item) => !item.receivedAt && !item.cancelledAt))
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 }
 
 function pendingPurchaseForProduct(productId) {
   for (const order of activePurchaseOrders()) {
-    const item = (order.items || []).find((entry) => entry.productId === productId && !entry.receivedAt);
+    const item = (order.items || []).find((entry) => entry.productId === productId && !entry.receivedAt && !entry.cancelledAt && (entry.local || order.local || "Central") === local);
     if (item) return { order, item };
   }
   return null;
@@ -487,7 +487,7 @@ function pendingPurchaseForProduct(productId) {
 
 function weeklySalesForProduct(productId) {
   const since = Date.now() - (7 * 24 * 60 * 60 * 1000);
-  return listSales().reduce((total, sale) => {
+  return listSales({ local }).reduce((total, sale) => {
     if (new Date(sale.date || 0).getTime() < since) return total;
     return total + (sale.items || []).reduce((sum, item) => {
       return sum + (item.productId === productId ? Number(item.quantity || 0) : 0);
@@ -568,6 +568,7 @@ async function markNoStockAndOrder() {
       const suggestedPacks = Math.max(1, Math.ceil(weeklySales / packQuantity));
       const item = {
         id: createId("purchase_item"),
+        local,
         productId: product.id,
         name: product.name,
         supplier: product.supplier || "Otros",
@@ -579,16 +580,9 @@ async function markNoStockAndOrder() {
         stockAtCreation: 0,
         receivedAt: null,
       };
-      const existingOrder = activePurchaseOrders()[0];
-      const order = existingOrder
-        ? {
-            ...existingOrder,
-            items: (existingOrder.items || []).concat(item),
-            status: "active",
-            completedAt: null,
-          }
-        : {
+      const order = {
             id: createId("purchase_order"),
+            local,
             createdAt: new Date().toISOString(),
             status: "active",
             items: [item],
