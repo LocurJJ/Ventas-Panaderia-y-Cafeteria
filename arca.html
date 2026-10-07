@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ARCA - Panaderia Josue V2</title>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/arca.css?v=20260907-day-filter">
+  <link rel="stylesheet" href="css/arca.css?v=20261007-payment-filter">
 </head>
 <body>
   <main class="page-shell arca-shell">
@@ -47,6 +47,15 @@
               <option value="Cafeteria">Cafeteria</option>
             </select>
           </label>
+          <label class="arca-payment-filter">
+            Medio de pago
+            <select id="arcaPaymentFilter" aria-describedby="arcaPaymentHint">
+              <option value="all">Todos los medios de pago</option>
+              <option value="electronic">Otros medios de pago electrónico</option>
+              <option value="cash">Efectivo</option>
+            </select>
+          </label>
+          <small id="arcaPaymentHint" class="arca-payment-hint">Medios electrónicos incluye las ventas mixtas. Efectivo muestra solo las pagadas íntegramente en efectivo.</small>
         </div>
       </div>
       <div class="sales-status-summary" id="salesStatusSummary"></div>
@@ -151,6 +160,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/db.js?v=20260929-orders-local"></script>
-  <script src="js/arca.js?v=20260907-day-filter"></script>
+  <script src="js/arca.js?v=20261007-payment-filter"></script>
 </body>
 </html>

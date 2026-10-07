@@ -74,6 +74,10 @@
   min-height: 43px;
 }
 
+.arca-toolbar > div { min-width: 0; }
+.arca-sales-filters .arca-payment-filter { width: 300px; max-width: 100%; }
+.arca-payment-hint { flex-basis: 100%; max-width: 580px; color: var(--muted); line-height: 1.4; }
+
 .sales-status-summary,
 .invoice-report-summary {
   display: grid;

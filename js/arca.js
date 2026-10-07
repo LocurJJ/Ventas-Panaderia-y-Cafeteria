@@ -119,9 +119,13 @@ function refreshSales() {
 function selectedStoreSales() {
   const store = $("arcaStoreSelect").value;
   const selectedDate = $("arcaDateFilter").value;
+  const payment = $("arcaPaymentFilter").value;
   return sales.filter((sale) => (
     sale.local === store
     && (!selectedDate || saleDayKey(sale.date) === selectedDate)
+    && (payment === "all"
+      || (payment === "electronic" && paymentCode(sale) !== "EFECTIVO")
+      || (payment === "cash" && paymentCode(sale) === "EFECTIVO"))
   ));
 }
 
@@ -206,7 +210,7 @@ function renderSales() {
   const rows = selectedStoreSales();
   renderSalesSummary(rows);
   $("arcaSalesList").innerHTML = rows.length === 0
-    ? `<div class="arca-empty"><strong>No hay ventas en ${escapeHtml($("arcaStoreSelect").value)} para esta fecha.</strong><span>Elegí otro día para consultar las ventas anteriores.</span></div>`
+    ? `<div class="arca-empty"><strong>No hay ventas que coincidan con los filtros.</strong><span>Revisá la fecha, el local o el medio de pago seleccionado.</span></div>`
     : renderSalesByDay(rows);
 }
 
@@ -431,6 +435,7 @@ document.querySelectorAll("[data-arca-view]").forEach((button) => {
 
 $("arcaStoreSelect").addEventListener("change", renderAll);
 $("arcaDateFilter").addEventListener("change", renderAll);
+$("arcaPaymentFilter").addEventListener("change", renderSales);
 $("arcaTodayButton").addEventListener("click", () => {
   $("arcaDateFilter").value = saleDayKey(new Date());
   renderAll();
@@ -489,4 +494,3 @@ $("arcaDateFilter").max = saleDayKey(new Date());
 refreshSales();
 showView(activeArcaView);
 checkArcaConnection();
-
