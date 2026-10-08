@@ -6,6 +6,7 @@
   <title>Ventas - Panaderia Josue V2</title>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/sales.css?v=20260914-stock-control">
+  <link rel="stylesheet" href="css/local-product-images.css?v=20261008-local-photos">
 </head>
 <body>
   <div class="sales-app">
@@ -23,6 +24,21 @@
     </aside>
 
     <main class="workspace">
+      <details class="local-photos-settings">
+        <summary>Fotos de productos · carpeta de esta computadora</summary>
+        <p>Guardá las fotos directamente en una carpeta, en formato JPG, PNG o WebP. Usá el código de barras como nombre: <code>7791234567890.jpg</code>. Para productos sin código o con códigos repetidos, usá el identificador de la lista descargable.</p>
+        <p>Copiá la misma carpeta en cada local y seleccionala en cada computadora. Las fotos no se suben a Firebase ni a internet. Usá fotos pequeñas, por ejemplo de 400 × 400 píxeles.</p>
+        <div class="local-photos-actions">
+          <button type="button" class="primary-button" id="chooseLocalPhotos">Elegir carpeta de fotos</button>
+          <button type="button" class="secondary-button" id="refreshLocalPhotos">Habilitar / actualizar</button>
+          <button type="button" class="secondary-button" id="downloadPhotoNames">Descargar nombres de fotos</button>
+          <button type="button" class="secondary-button" id="forgetLocalPhotos">Desvincular carpeta</button>
+        </div>
+        <p id="localPhotosStatus" role="status">Todavía no elegiste una carpeta. Podés seguir vendiendo sin fotos.</p>
+        <p id="localPhotosCount"></p>
+        <button type="button" class="secondary-button" id="fallbackLocalPhotos">Elegir carpeta (alternativa)</button>
+        <input type="file" id="localPhotosFiles" webkitdirectory multiple hidden>
+      </details>
       <section class="view sell-view" id="sellView">
         <aside class="cart-panel">
           <div class="mode-switch hidden" id="cafeModeSwitch">
@@ -227,5 +243,6 @@
   <script src="js/firebase-config.js"></script>
   <script src="js/db.js?v=20260929-orders-local"></script>
   <script src="js/sales.js?v=20260929-orders-local"></script>
+  <script src="js/local-product-images.js?v=20261008-local-photos"></script>
 </body>
 </html>

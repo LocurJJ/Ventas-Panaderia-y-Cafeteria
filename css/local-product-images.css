@@ -1,0 +1,10 @@
+.local-photos-settings { margin-bottom:14px; padding:12px 16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+.local-photos-settings summary { cursor:pointer; font-weight:700; }
+.local-photos-settings p { color:var(--muted); line-height:1.45; margin:10px 0; }
+.local-photos-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.local-photos-actions button { padding:9px 12px; }
+.local-photos-settings code { overflow-wrap:anywhere; }
+.local-product-photo { display:block; width:100%; height:110px; object-fit:contain; border-radius:7px; background:#fff; margin:0 0 8px; pointer-events:none; }
+.local-product-photo[hidden] { display:none; }
+.cafe-product-card .local-product-photo { height:90px; }
+@media(max-width:600px) { .local-product-photo {height:90px;} .local-photos-actions button {flex:1 1 150px;} }
