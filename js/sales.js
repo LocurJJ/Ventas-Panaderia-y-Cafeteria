@@ -434,17 +434,22 @@ function printTableTicket() {
     <html lang="es"><head><meta charset="utf-8"><title>Ticket de cafetería</title>
     <style>
       * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; height: auto; min-height: 0; color: #000; background: #fff; }
-      #ticket { width: 80mm; margin: 0; padding: 2mm; font: 16px/1.25 Arial, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+      html, body { margin: 0; padding: 0; height: auto; color: #000; background: #fff; }
+      #ticket { width: 80mm; height: auto; margin: 0; padding: 1mm 4mm; font: 16px/1.25 Arial, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
       #printOptions { padding: 12px; font: 14px/1.4 Arial, sans-serif; background: #eef2f6; }
       #printOptions button, #printOptions select { margin: 4px; padding: 6px; }
-      @media print { #printOptions { display: none !important; } }
-    </style><style id="ticketPageSize"></style></head><body>
+      @page { size: portrait; margin: 0; }
+      @media print {
+        html, body { width: auto; height: auto; overflow: visible; }
+        #printOptions { display: none !important; }
+        #ticket { height: auto; overflow: visible; break-before: auto; break-after: auto; break-inside: auto; }
+      }
+    </style></head><body>
       <section id="printOptions">
         <label>Rollo <select id="ticketWidth"><option value="80">80 mm</option><option value="58">58 mm</option></select></label>
         <button id="printTicket" type="button">Imprimir</button>
-        <p>Usá el ancho de tu rollo, escala 100%, márgenes ninguno y desactivá encabezados y pies de página.
-        Si sigue saliendo papel en blanco, revisá en las preferencias de la impresora el largo del papel o la opción de ahorro de papel.</p>
+        <p>En la impresora elegí papel de rollo de 80 mm (no A4), orientación vertical, escala 100%, márgenes ninguno y desactivá encabezados y pies de página.
+        El contenido no tiene un largo fijo. El avance y el corte dependen del controlador: si queda blanco al final, revisá el ahorro de papel, la eliminación del blanco final y el corte al finalizar el documento, si esas opciones están disponibles.</p>
       </section><pre id="ticket"></pre>
     </body></html>`);
   printWindow.document.close();
@@ -456,10 +461,8 @@ function printTableTicket() {
   const sizeTicket = () => {
     const width = widthSelect.value === "58" ? 58 : 80;
     ticket.style.width = `${width}mm`;
-    // CSS pixels are 96 per inch. Measure after wrapping at the chosen roll width.
-    // One extra millimetre avoids rounding onto a second page.
-    const height = Math.ceil(ticket.getBoundingClientRect().height * 25.4 / 96) + 1;
-    printWindow.document.getElementById("ticketPageSize").textContent = `@page { size: ${width}mm ${height}mm; margin: 0; }`;
+    // Keep natural content height. The Windows roll driver controls paper length and cutting.
+    // Do not request a short landscape page: some drivers rotate it by 90 degrees.
   };
   const printTicket = () => {
     sizeTicket();
