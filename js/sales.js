@@ -424,7 +424,7 @@ function printTableTicket() {
     return;
   }
   const lines = order.items.map((item) => `${item.quantity} x ${item.name} - ${money(item.total)}`).join("\n");
-  const text = `${tableLabel(order.id)}\n\n${lines}\n\nTotal: ${money(tableTotal(order))}`;
+  const text = `Panadería Josue y Hermanas\nSucursal cafetería (Cuba 2074)\nPontevedra\n\n${tableLabel(order.id)}\n\n${lines}\n\nTotal: ${money(tableTotal(order))}\n\n¡Gracias por su compra!\n¡Dios lo bendiga!`;
   const printWindow = window.open("", "_blank", "width=360,height=520");
   if (!printWindow) {
     alert("El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para imprimir el ticket.");
