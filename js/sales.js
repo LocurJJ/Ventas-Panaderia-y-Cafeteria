@@ -426,9 +426,55 @@ function printTableTicket() {
   const lines = order.items.map((item) => `${item.quantity} x ${item.name} - ${money(item.total)}`).join("\n");
   const text = `${tableLabel(order.id)}\n\n${lines}\n\nTotal: ${money(tableTotal(order))}`;
   const printWindow = window.open("", "_blank", "width=360,height=520");
-  printWindow.document.write(`<pre style="font-family: Arial; font-size: 16px; white-space: pre-wrap;">${text}</pre>`);
+  if (!printWindow) {
+    alert("El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para imprimir el ticket.");
+    return;
+  }
+  printWindow.document.write(`<!doctype html>
+    <html lang="es"><head><meta charset="utf-8"><title>Ticket de cafetería</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; height: auto; min-height: 0; color: #000; background: #fff; }
+      #ticket { width: 80mm; margin: 0; padding: 2mm; font: 16px/1.25 Arial, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+      #printOptions { padding: 12px; font: 14px/1.4 Arial, sans-serif; background: #eef2f6; }
+      #printOptions button, #printOptions select { margin: 4px; padding: 6px; }
+      @media print { #printOptions { display: none !important; } }
+    </style><style id="ticketPageSize"></style></head><body>
+      <section id="printOptions">
+        <label>Rollo <select id="ticketWidth"><option value="80">80 mm</option><option value="58">58 mm</option></select></label>
+        <button id="printTicket" type="button">Imprimir</button>
+        <p>Usá el ancho de tu rollo, escala 100%, márgenes ninguno y desactivá encabezados y pies de página.
+        Si sigue saliendo papel en blanco, revisá en las preferencias de la impresora el largo del papel o la opción de ahorro de papel.</p>
+      </section><pre id="ticket"></pre>
+    </body></html>`);
   printWindow.document.close();
-  printWindow.print();
+  const ticket = printWindow.document.getElementById("ticket");
+  const widthSelect = printWindow.document.getElementById("ticketWidth");
+  // Insert names as text, so product names cannot become markup in the receipt.
+  ticket.textContent = text;
+  try { widthSelect.value = localStorage.getItem("cafeTicketWidth") === "58" ? "58" : "80"; } catch (_) {}
+  const sizeTicket = () => {
+    const width = widthSelect.value === "58" ? 58 : 80;
+    ticket.style.width = `${width}mm`;
+    // CSS pixels are 96 per inch. Measure after wrapping at the chosen roll width.
+    // One extra millimetre avoids rounding onto a second page.
+    const height = Math.ceil(ticket.getBoundingClientRect().height * 25.4 / 96) + 1;
+    printWindow.document.getElementById("ticketPageSize").textContent = `@page { size: ${width}mm ${height}mm; margin: 0; }`;
+  };
+  const printTicket = () => {
+    sizeTicket();
+    printWindow.focus();
+    printWindow.print();
+  };
+  widthSelect.addEventListener("change", () => {
+    try { localStorage.setItem("cafeTicketWidth", widthSelect.value); } catch (_) {}
+    sizeTicket();
+  });
+  printWindow.document.getElementById("printTicket").addEventListener("click", printTicket);
+  printWindow.addEventListener("beforeprint", sizeTicket);
+  sizeTicket();
+  // Let the popup finish laying out before opening the browser print preview.
+  printWindow.requestAnimationFrame(() => printWindow.requestAnimationFrame(printTicket));
 }
 
 function fillMiniSuppliers() {
